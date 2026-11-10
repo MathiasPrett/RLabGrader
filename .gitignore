@@ -1,0 +1,71 @@
+# =====================================================================
+#  RLabGrader — .gitignore
+#  Regla general: NADA con claves, ni datos de estudiantes, sube al repo.
+# =====================================================================
+
+# --- Secretos y configuración local ----------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.token
+secrets*
+credentials*
+*_token*
+*apikey*
+*api_key*
+
+# --- Datos de estudiantes y del curso --------------------------------
+# Listas de alumnos, notas exportadas de Canvas, planillas de coordinación
+docs/
+data/
+out/
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.xlsm
+*.ods
+*.rds
+*.RData
+*.Rhistory
+*.db
+*.sqlite
+*.sqlite3
+submission_debug.json
+t.txt
+
+# Scripts personales de exploración (contienen IDs reales de Canvas)
+main.py
+inspect_response.py
+scratch/
+notebooks/
+
+# --- Python ----------------------------------------------------------
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- R ---------------------------------------------------------------
+.Rproj.user/
+Rplots.pdf
+
+# --- Editores y sistema ----------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.log
+
+# --- Configuración local de herramientas -----------------------------
+.claude/settings.local.json

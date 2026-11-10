@@ -1,0 +1,18 @@
+[project]
+name = "rlabgrader"
+version = "0.1.0"
+description = "Corrector asistido (human in the loop) de bonos y talleres de R en Canvas"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "canvasapi>=3.6.0",
+    "fastapi>=0.162.4",
+    "groq>=1.7.0",
+    "jinja2>=3.1.6",
+    "openpyxl>=3.1.5",
+    "pydantic>=2.14.3",
+    "python-dotenv>=1.2.4",
+    "python-multipart>=0.0.33",
+    "requests>=2.34.2",
+    "uvicorn>=0.54.0",
+]
