@@ -200,3 +200,11 @@ los datos de los estudiantes.
 opinión** no vinculante, que puede estar equivocada. Revisar, corregir y confirmar cada puntaje y
 cada comentario es **responsabilidad exclusiva y obligatoria de la persona que corrige**. Ninguna
 nota se publica sin una confirmación humana explícita, y quien confirma es responsable de ella.
+
+---
+
+## Licencia
+
+[MIT](LICENSE). Puedes usar, copiar, modificar y distribuir este software libremente, manteniendo
+el aviso de copyright. Se entrega "tal cual", sin garantías (ver también el descargo de
+responsabilidad más arriba).
