@@ -133,7 +133,9 @@ function renderStudent() {
     const optHtml = opts.length ? `<ul class="opts">${opts.map((o) => `<li class="${o === it.answer_q.correct ? "right" : ""} ${o === it.answer_text ? "chosen" : ""}">${esc(o)}</li>`).join("")}</ul>` : "";
     const frag = fragmentOf(it);
     let codeHtml = "";
-    if (!taller) codeHtml = st.code.trim() ? codeBlock(st.code) : '<p class="bad">(no entregó código)</p>';
+    const noCode = S.info.pauta_extra ? '<p class="muted">(no entregó código — ver excepción de esta evaluación)</p>' : '<p class="bad">(no entregó código)</p>';
+    const srcTag = st.code_source === "buzón" ? '<div class="small buzon">📥 Código recibido en el buzón aparte (solo local, no está en Canvas)</div>' : "";
+    if (!taller) codeHtml = st.code.trim() ? srcTag + codeBlock(st.code) : noCode;
     else if (frag) codeHtml = `<div class="small muted">Código de esta pregunta — ${frag.src}</div>${codeBlock(st.code, frag.lines)}`;
     else codeHtml = `<div class="small warn">No se identificó el código de esta pregunta (pide la sugerencia IA o revisa el código completo).</div>`;
     return `<div class="card item ${taller && k === S.item ? "active" : ""}" data-k="${k}">
@@ -190,7 +192,8 @@ function renderGrade() {
   const cur = S.fr[S.item];
   $("#levels").innerHTML = tabs + lv.map((l) => `<button data-v="${l.score}" class="lvl ${cur === l.score ? "on" : ""}" title="${esc(l.note)}">
       <b>${l.score}</b> — ${esc(l.description)}${sug === l.score ? '<span class="sug">IA sugiere</span>' : ""}</button>`).join("") +
-    (S.info?.rubric_note ? `<div class="small muted">${esc(S.info.rubric_note)}</div>` : "");
+    (S.info?.rubric_note ? `<div class="small muted">${esc(S.info.rubric_note)}</div>` : "") +
+    (S.info?.pauta_extra ? `<details class="small excepcion" open><summary><b>Excepción de esta evaluación</b></summary><pre>${esc(S.info.pauta_extra)}</pre></details>` : "");
   $("#levels").querySelectorAll(".lvl").forEach((b) => (b.onclick = () => setScore(+b.dataset.v)));
   $("#levels").querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => setItem(+b.dataset.k)));
   const pp = S.info?.points_possible;

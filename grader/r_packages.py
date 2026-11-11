@@ -31,6 +31,7 @@ FUNC_PKG = {
     "janitor": ["clean_names", "tabyl"],
     "moments": ["skewness", "kurtosis"],
     "fitdistrplus": ["fitdist", "descdist"],
+    "mvtnorm": ["pmvnorm", "dmvnorm", "rmvnorm", "qmvnorm", "pmvt"],
     "tidyr": ["pivot_longer", "pivot_wider", "drop_na", "replace_na"],
 }
 # dplyr también provee %>%, filter y select: si usa verbos de dplyr, basta con dplyr

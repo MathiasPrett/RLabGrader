@@ -67,3 +67,8 @@ pre.code code.hljs { background: transparent; padding: 0; }
 #total { margin: 6px 0; }
 details.ctx summary { cursor: pointer; margin-top: 6px; }
 details.ctx pre { margin-top: 6px; }
+
+/* parches locales */
+.buzon { color: #7c3aed; margin: 6px 0 2px; }
+.excepcion { margin-top: 8px; padding: 6px 8px; background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 6px; }
+.excepcion pre { font-size: 12px; margin-top: 4px; }

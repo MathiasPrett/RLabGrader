@@ -85,6 +85,8 @@ class Item:
     code_text: str
     fragment_lines: list[list[int]] = field(default_factory=list)  # [[ini, fin], ...] 1-based
     fragment_source: str = "todo"  # todo | comentarios | ia | no detectado
+    code_source: str = "canvas"     # canvas | buzón (parche local)
+    code_in_submission: bool = True  # False si la entrega no incluye la pregunta de código
 
     @property
     def points(self):
@@ -162,7 +164,8 @@ class AssessmentType:
                 answer_text=q.student_answer(d) or "(sin respuesta)",
                 canvas_correct=parse_correct(d.get("correct")),
                 canvas_points=float(d.get("points") or 0),
-                code_q=code_q, code_text=code_text))
+                code_q=code_q, code_text=code_text,
+                code_in_submission=bool(code_q and code_q.id in data)))
         if self.segment_code and items:
             from .segment import segment
             found = segment(code_text, len(items))
@@ -180,6 +183,6 @@ class AssessmentType:
         Canvas deja la entrega en 'pending_review' y no la considera corregida.
         """
         out = {item.answer_q.id: round(fraction * item.points, 4)}
-        if item.code_q:
+        if item.code_q and item.code_in_submission:
             out[item.code_q.id] = 0.0
         return out

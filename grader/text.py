@@ -6,6 +6,8 @@ import re
 def html_to_text(s: str | None) -> str:
     if not s:
         return ""
+    # fórmulas de Canvas (imágenes) → $LaTeX$
+    s = re.sub(r'<img[^>]*data-equation-content="([^"]*)"[^>]*>', lambda m: f" ${html.unescape(m.group(1))}$ ", s)
     s = re.sub(r"(?i)<br\s*/?>", "\n", s)
     s = re.sub(r"(?i)</(p|div|li|pre|h\d)>", "\n", s)
     s = re.sub(r"<[^>]+>", "", s)

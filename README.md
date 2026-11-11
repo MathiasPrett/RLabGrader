@@ -154,6 +154,27 @@ Bonos y talleres se reconocen por el nombre de la tarea en Canvas: `BonoXX` (ej.
 
 ---
 
+## Parches locales (casos excepcionales)
+
+Si una evaluación tuvo un problema puntual (por ejemplo, faltó la pregunta de código y los alumnos
+lo entregaron en otro buzón), puedes crear `data/overrides/<ID de la tarea>.json` (solo en tu
+computador, nunca se sube a git ni a Canvas):
+
+```json
+{
+  "codigo_externo": "data/mi_buzon/submissions",
+  "estado_local": true,
+  "pauta_extra": "Regla excepcional que la IA y tú verán junto a la pauta."
+}
+```
+
+- `codigo_externo`: carpeta con la descarga de entregas del buzón (Canvas → tarea → *Descargar
+  entregas*); se cruza con cada alumno por su ID de Canvas en el nombre del archivo.
+- `estado_local`: "ya revisado" solo si corregiste desde la app (útil si Canvas autocorrigió).
+- `pauta_extra`: regla especial con prioridad sobre la pauta.
+
+Si borras el archivo, la evaluación vuelve a funcionar como siempre.
+
 ## Privacidad y seguridad
 
 - Las claves viven solo en tu `.env`, en tu computador.

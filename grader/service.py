@@ -2,7 +2,7 @@
 import threading
 from dataclasses import dataclass, field
 
-from . import config, r_runner, resources, roster, store
+from . import config, overrides, r_runner, resources, roster, store
 from .ai import AIAdvisor, CaseInput, ItemCase
 from .assessments import AssessmentType, Item, Question, detect_type, get_type
 from .canvas_client import CanvasClient
@@ -96,8 +96,18 @@ class Service:
 
     def items_for(self, ev: Evaluation, user_id) -> list[Item]:
         if user_id not in ev.items:
-            ev.items[user_id] = ev.atype.build_items(ev.questions, self.sub_data(ev, user_id))
+            items = ev.atype.build_items(ev.questions, self.sub_data(ev, user_id))
+            ov = overrides.load(ev.id)
+            if items and not items[0].code_text.strip() and (ext := overrides.external_code(ov, user_id)):
+                for it in items:  # parche local: código recibido en otro buzón (no está en Canvas)
+                    it.code_text, it.code_source = ext, "buzón"
+            ev.items[user_id] = items
         return ev.items[user_id]
+
+    def pauta_text(self, ev) -> str:
+        extra = overrides.load(ev.id).get("pauta_extra", "")
+        base = ev.atype.rubric.as_text()
+        return f"{base}\n\nEXCEPCIÓN PARA ESTA EVALUACIÓN (tiene prioridad sobre la pauta):\n{extra}" if extra else base
 
     def contexts(self, ev, user_id):
         return ev.atype.contexts_for(ev.questions, self.sub_data(ev, user_id))
@@ -111,25 +121,36 @@ class Service:
         return items[0].code_text if items else ""
 
     @staticmethod
-    def status(sub):
-        """Según Canvas: 'graded' = corregida (todas las preguntas con puntaje)."""
+    def status(sub, local_sent=None):
+        """Según Canvas: 'graded' = corregida (todas las preguntas con puntaje).
+        local_sent (parche 'estado_local'): set de alumnos corregidos desde la app; Canvas pudo
+        autocorregir la entrega, así que solo cuenta lo revisado por un humano."""
         if not sub or sub.get("workflow_state") == "unsubmitted":
             return "sin_entrega"
+        if local_sent is not None:
+            human = (sub.get("grader_id") or 0) > 0 or sub.get("user_id") in local_sent
+            return "revisado" if human and sub.get("workflow_state") == "graded" else "pendiente"
         if sub.get("workflow_state") == "graded":
             return "revisado"
         return "pendiente"
+
+    def _local_sent(self, ev):
+        if not overrides.load(ev.id).get("estado_local"):
+            return None
+        return {u for u, g in store.graded_by_app(ev.id).items() if not g["dry_run"]}
 
     # ---------- vistas ----------
     def roster_view(self, ev: Evaluation, day, group):
         entries = roster.load_group(self.students(), day, group)
         self.ensure_subs(ev, [e.user_id for e in entries])
         sent = store.graded_by_app(ev.id)
+        local = self._local_sent(ev)
         out = []
         for e in entries:
             sub = ev.subs.get(e.user_id) if e.user_id else None
             out.append({
                 "name": e.name, "user_id": e.user_id, "section": e.section, "match": e.match,
-                "warnings": e.warnings, "status": self.status(sub) if e.user_id else "no_encontrado",
+                "warnings": e.warnings, "status": self.status(sub, local) if e.user_id else "no_encontrado",
                 "score": sub.get("score") if sub else None,
                 "app": sent.get(e.user_id),
             })
@@ -140,7 +161,7 @@ class Service:
         sub = ev.subs.get(user_id) or {}
         data = self.sub_data(ev, user_id)
         return {
-            "user_id": user_id, "status": self.status(sub), "score": sub.get("score"),
+            "user_id": user_id, "status": self.status(sub, self._local_sent(ev)), "score": sub.get("score"),
             "points_possible": ev.assignment.get("points_possible"),
             "submitted_at": sub.get("submitted_at"), "late": sub.get("late"),
             "comments": [{"author": c.get("author_name"), "text": c.get("comment"), "at": c.get("created_at")}
@@ -149,6 +170,8 @@ class Service:
             "files": [p.name for p in self.data_files(ev, user_id)] if data else [],
             "base_points": ev.atype.base_points(ev.questions, data),
             "code": self.code_of(ev, user_id),
+            "code_source": (self.items_for(ev, user_id) or [None])[0].code_source
+            if self.items_for(ev, user_id) else "canvas",
             "items": [i.to_dict() for i in self.items_for(ev, user_id)],
             "speedgrader": f"{config.CANVAS_URL}/courses/{config.COURSE_ID}/gradebook/speed_grader"
                            f"?assignment_id={ev.id}&student_id={user_id}",
@@ -162,6 +185,7 @@ class Service:
             "rubric": [{"score": l.score, "description": l.description, "note": l.note}
                        for l in ev.atype.rubric.levels],
             "rubric_note": ev.atype.rubric.general_note,
+            "pauta_extra": overrides.load(rid).get("pauta_extra", ""),
             "files": [p.name for p in resources.data_files(rid)],
             "solution": resources.read_text(rid, resources.SOLUTION),
             "notes": resources.read_text(rid, resources.NOTES),
@@ -198,7 +222,7 @@ class Service:
         case = CaseInput(
             tipo=ev.atype.key,
             contexto=ev.atype.context_text(ev.questions, self.sub_data(ev, user_id)),
-            pauta=ev.atype.rubric.as_text(), codigo=code, ejecucion_r=ejec,
+            pauta=self.pauta_text(ev), codigo=code, ejecucion_r=ejec,
             bd_muestra="\n\n".join(resources.schema_preview(p) for p in self.data_files(ev, user_id)),
             items=[ItemCase(
                 n=i.n, pregunta=i.answer_q.text, respuesta_correcta=i.answer_q.correct,
