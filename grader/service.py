@@ -112,9 +112,10 @@ class Service:
 
     @staticmethod
     def status(sub):
+        """Según Canvas: 'graded' = corregida (todas las preguntas con puntaje)."""
         if not sub or sub.get("workflow_state") == "unsubmitted":
             return "sin_entrega"
-        if sub.get("workflow_state") == "graded" and (sub.get("grader_id") or 0) > 0:
+        if sub.get("workflow_state") == "graded":
             return "revisado"
         return "pendiente"
 
@@ -227,7 +228,12 @@ class Service:
         if comment.strip():
             result["comment"] = self.client.add_comment(ev.id, user_id, comment.strip())
         store.log_grade(ev.id, user_id, scores, comment, config.DRY_RUN, result)
-        if not config.DRY_RUN:  # releer para mostrar lo que quedó en Canvas
+        state = None
+        if not config.DRY_RUN:  # releer para confirmar lo que quedó en Canvas
             self.ensure_subs(ev, [user_id], refresh=True)
-        return {"dry_run": config.DRY_RUN, "scores": scores,
+            state = (ev.subs.get(user_id) or {}).get("workflow_state")
+            if state != "graded":
+                raise ValueError(f"Canvas guardó los puntajes pero la entrega quedó en estado '{state}' "
+                                 "(no 'graded'). Revísala en SpeedGrader.")
+        return {"dry_run": config.DRY_RUN, "scores": scores, "state": state,
                 "new_score": (ev.subs.get(user_id) or {}).get("score")}

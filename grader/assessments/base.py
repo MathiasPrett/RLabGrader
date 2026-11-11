@@ -174,5 +174,12 @@ class AssessmentType:
         return items
 
     def score_targets(self, item: Item, fraction: float) -> dict[int, float]:
-        """Qué preguntas modificar en Canvas y con cuántos puntos (pauta = fracción del puntaje)."""
-        return {item.answer_q.id: round(fraction * item.points, 4)}
+        """Qué preguntas modificar en Canvas y con cuántos puntos (pauta = fracción del puntaje).
+
+        La pregunta de código (ensayo) se marca explícitamente con 0: si queda sin puntaje,
+        Canvas deja la entrega en 'pending_review' y no la considera corregida.
+        """
+        out = {item.answer_q.id: round(fraction * item.points, 4)}
+        if item.code_q:
+            out[item.code_q.id] = 0.0
+        return out
