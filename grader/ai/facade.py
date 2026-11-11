@@ -85,7 +85,13 @@ Reglas:
 - Hay muchas formas válidas de resolver con R (table, prop.table, subset, dplyr, sum/length, etc.).
   No penalices un método distinto si es correcto.
 - Si se entrega la ejecución del código, úsala para juzgar si funciona y qué obtiene. Los ajustes
-  automáticos (rutas, file.choose, precarga de la base) los hizo el sistema: NO son errores del alumno.
+  automáticos (rutas, file.choose, precarga de la base, carga o instalación de paquetes) los hizo el
+  sistema: NO son errores del alumno.
+- Errores de entorno NO son del alumno y no deben bajar el puntaje: "there is no package called ...",
+  "could not find function" de funciones de paquetes (import, read_excel, %>%, ggplot...), o una base de
+  datos que no se encontró por su nombre de variable. En esos casos juzga el código por su lógica.
+- Sí son del alumno: errores de sintaxis, variables que nunca definió (p. ej. usar `media` sin
+  calcularla), filtros o funciones equivocadas, resultados que no coinciden.
 - En talleres todo el código viene en un solo campo. Ubica qué líneas responden cada pregunta
   (el número de pregunta es el orden en que el alumno las vio: P1, P2...). Que el código esté
   desordenado o sin títulos no es, por sí solo, motivo de descuento.

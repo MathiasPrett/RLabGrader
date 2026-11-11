@@ -19,7 +19,9 @@ alumnos, su respuesta, su código R ejecutado y, si lo pides, una **primera opin
 - **▶ Ejecutar R**: corre el código del alumno en tu computador con la base de datos correcta
   (se descarga sola desde el enunciado). Muestra la salida, los errores línea por línea y los
   gráficos. Corrige solo los problemas típicos que no son culpa del alumno (rutas `C:/Users/...`,
-  `file.choose()`, copias de la consola, títulos sin `#`, base no cargada) y te dice qué ajustó.
+  `file.choose()`, copias de la consola, títulos sin `#`, base de datos guardada con otro nombre
+  como `bd` o `datos`, paquetes usados sin `library()`) y te dice qué ajustó. Si el alumno usa un
+  paquete que no tienes instalado, lo instala solo desde CRAN en `data/Rlib` (sin tocar tu R).
 - **Talleres**: separa el código de cada pregunta usando los títulos que puso el alumno
   (`#1`, `Pregunta 2:`, `#P3`…); si no hay, la IA propone dónde está. Cada pregunta tiene su puntaje
   (p. ej. 1 o 1.5) y la pauta se aplica como fracción de ese puntaje.
@@ -62,8 +64,8 @@ debería mostrar un número de versión.
 
 Si ya usas R o RStudio, ya lo tienes. Si no, descárgalo de <https://cran.r-project.org/> e instálalo.
 
-Luego abre R (o RStudio) y ejecuta una vez esta línea para instalar los paquetes que suelen usar
-los alumnos:
+Luego abre R (o RStudio) y ejecuta una vez esta línea para instalar los paquetes más comunes
+(si un alumno usa otro, RLabGrader lo instala solo la primera vez que lo necesite):
 ```r
 install.packages(c("readxl", "rio", "dplyr"))
 ```

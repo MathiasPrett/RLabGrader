@@ -10,11 +10,11 @@ import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from . import config, store
+from . import config, r_packages, store
 from .assessments import segment
 
 MAX_OUT = 8000
-RUNNER_VERSION = 5  # subir al cambiar prepare() o runner.R: invalida la caché
+RUNNER_VERSION = 6  # subir al cambiar prepare() o runner.R: invalida la caché
 MAX_PLOTS = 12
 MEM_BYTES = 2 * 1024**3
 
@@ -43,7 +43,30 @@ _CONSOLE_NOISE = re.compile(r"^\s*(\[\d+\]|R version|Copyright|Platform:|Type '|
 _IDENT = r"[A-Za-z][A-Za-z0-9._]*"
 _KNOWN = {"T", "F", "TRUE", "FALSE", "NULL", "NA", "NaN", "Inf", "c", "data", "df", "letters", "LETTERS",
           "pi", "iris", "mtcars", "month.name"}
+_NOT_DATA = {"x", "y", "n", "i", "j", "k", "p", "q"}  # nombres típicos de vectores o índices
 _READERS = {".csv": "read.csv", ".xlsx": "readxl::read_excel", ".xls": "readxl::read_excel"}
+
+
+_DATA_FUNCS = ("with|within|subset|attach|nrow|ncol|dim|head|tail|summary|str|names|colnames|View|"
+               "filter|select|mutate|arrange|group_by|summarise|summarize|count|distinct|glimpse|"
+               "transform|split|merge|droplevels|na\\.omit|complete\\.cases|sapply|lapply|apply|"
+               "aggregate|tapply|by|boxplot|hist|plot")
+
+
+def data_like_uses(code) -> list[str]:
+    """Nombres usados como data frame: X$col, X[...], f(X, ...), X %>%, data = X, var <- X."""
+    used = re.findall(rf"(?<![\w.$`])({_IDENT})\s*(?:\$|\[)", code)
+    used += re.findall(rf"(?:<-|=)\s*({_IDENT})\s*(?:#.*)?$", code, re.M)
+    used += re.findall(rf"\b(?:{_DATA_FUNCS})\(\s*({_IDENT})\s*[,)]", code)
+    used += re.findall(rf"(?<![\w.$])({_IDENT})\s*%>%", code)
+    used += re.findall(rf"\bdata\s*=\s*({_IDENT})\b", code)
+    return list(dict.fromkeys(used))
+
+
+def _assigned(code, var):
+    v = re.escape(var)
+    return re.search(rf"(?<![\w.$]){v}\s*(<<?-|=(?!=))|->\s*{v}\b|assign\(\s*[\"']{v}"
+                     rf"|\bfor\s*\(\s*{v}\s+in\b|\bfunction\s*\([^)]*\b{v}\b", code)
 
 
 def _reader(name):
@@ -139,8 +162,7 @@ def prepare(code: str, data_names: list[str]) -> tuple[str, list[str]]:
 
     # Variables de datos usadas sin cargarlas (típico de importar con RStudio y no pegar esa línea)
     def assigned(var):
-        return re.search(rf"(?<![\w.$]){re.escape(var)}\s*(<<?-|=(?!=))|->\s*{re.escape(var)}\b"
-                         rf"|assign\(\s*[\"']{re.escape(var)}", code)
+        return _assigned(code, var)
 
     preload = []
     by_stem = {Path(n).stem: n for n in data_names}
@@ -150,13 +172,10 @@ def prepare(code: str, data_names: list[str]) -> tuple[str, list[str]]:
             preload.append(f"{var} <- {_reader(name)}")
             changes.append(f"precargado: {preload[-1]}")
     if data_names:  # otros nombres usados como data frame sin definirlos
-        used = list(re.findall(rf"(?<![\w.$`])({_IDENT})\s*(?:\$|\[)", code))           # Datos$x, bd[...]
-        used += re.findall(rf"(?:<-|=)\s*({_IDENT})\s*(?:#.*)?$", code, re.M)           # datos <- Taller1
-        used += re.findall(rf"\b(?:head|View|nrow|summary|str|names|attach)\(\s*({_IDENT})\s*\)", code)
+        used = data_like_uses(code)
         ticks = re.findall(r"`([^`\n]+)`", code)                                          # `Taller1.(1)`
         for var in dict.fromkeys(used + ticks):
-            if var in by_stem or var in _KNOWN or assigned(var) or re.search(
-                    rf"\bfunction\s*\(.*\b{re.escape(var)}\b", code):
+            if var in by_stem or var in _KNOWN or assigned(var) or var in _NOT_DATA:
                 continue
             target = f"`{var}`" if var in ticks and not re.fullmatch(_IDENT, var) else var
             if var in ticks and not re.search(rf"`{re.escape(var)}`\s*(?:\$|\[|\)|$|\s)", code, re.M):
@@ -164,7 +183,11 @@ def prepare(code: str, data_names: list[str]) -> tuple[str, list[str]]:
             preload.append(f"{target} <- {_reader(data_names[0])}")
             changes.append(f"precargado (supuesto): {preload[-1]}")
 
-    out = list(preload)
+    libs = []
+    for pkg in r_packages.inferred(code):
+        libs.append(f"suppressPackageStartupMessages(library({pkg}))")
+        changes.append(f"cargado el paquete {pkg} (usó sus funciones sin library())")
+    out = libs + list(preload)
     for line in code.splitlines():
         if re.match(r"\s*(setwd|install\.packages)\s*\(", line):
             changes.append(f"comentado: {line.strip()[:60]}")
@@ -200,7 +223,8 @@ _SECRET = re.compile(r"TOKEN|KEY|SECRET|PASSWORD|PASS|CREDENTIAL|AUTH", re.I)
 def _env(home) -> dict:
     """Entorno para el código del alumno: sin ninguna variable que parezca una clave."""
     env = {k: v for k, v in os.environ.items() if not _SECRET.search(k)}
-    env.update({"HOME": home, "USERPROFILE": home, "LANG": "C.UTF-8", "R_LIBS": _lib_paths()})
+    libs = os.pathsep.join(x for x in (str(r_packages.RLIB), _lib_paths()) if x)
+    env.update({"HOME": home, "USERPROFILE": home, "LANG": "C.UTF-8", "R_LIBS": libs})
     return env
 
 
@@ -219,28 +243,61 @@ def _plots(tmp) -> list[str]:
     return out
 
 
+_NOT_FOUND = re.compile(r"object '([^']+)' not found")
+
+
+def _retry_vars(prepared, stderr, data_names) -> list[str]:
+    """Variables que R no encontró y que el alumno nunca definió: probablemente su base de datos
+    con otro nombre (bd, datos...). Se excluyen las usadas como valor de un argumento (mean = media)."""
+    out = []
+    for var in dict.fromkeys(_NOT_FOUND.findall(stderr)):
+        if not re.fullmatch(_IDENT, var) or var in _KNOWN or var in _NOT_DATA or _assigned(prepared, var):
+            continue
+        if re.search(rf"\b(?!data\b)\w+\s*=\s*{re.escape(var)}\b(?!\s*\$)", prepared):
+            continue
+        out.append(var)
+    return out if data_names else []
+
+
+def _execute(prepared, data_files, rscript, env_home_files):
+    with tempfile.TemporaryDirectory(prefix="rgrade_") as tmp:
+        for p in data_files:
+            shutil.copy(p, tmp)
+        (Path(tmp) / "alumno.R").write_text(prepared, encoding="utf-8")
+        shutil.copy(RUNNER_R, Path(tmp) / "_run.R")  # ejecuta bloque a bloque y guarda gráficos
+        try:
+            p = subprocess.run([rscript, "--vanilla", "_run.R"], cwd=tmp, capture_output=True,
+                               text=True, encoding="utf-8", errors="replace", timeout=config.R_TIMEOUT,
+                               preexec_fn=None if sys.platform == "win32" else _limits, env=_env(tmp))
+            return dict(ok=p.returncode == 0, stdout=p.stdout[-MAX_OUT:], stderr=p.stderr[-MAX_OUT:],
+                        returncode=p.returncode, timed_out=False, plots=_plots(tmp))
+        except subprocess.TimeoutExpired as e:
+            out = e.stdout.decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
+            return dict(ok=False, stdout=out[-MAX_OUT:], stderr=f"Tiempo límite ({config.R_TIMEOUT}s) excedido",
+                        returncode=None, timed_out=True, plots=_plots(tmp))
+
+
 def run(code: str, data_files: list[Path], use_cache=True) -> RResult:
     names = [p.name for p in data_files]
     key = f"r{RUNNER_VERSION}:" + hashlib.sha256((code + "|" + ",".join(names)).encode()).hexdigest()
     if use_cache and (hit := store.cache_get(key)):
         return RResult(**hit)
     prepared, changes = prepare(code, names)
-    with tempfile.TemporaryDirectory(prefix="rgrade_") as tmp:
-        for p in data_files:
-            shutil.copy(p, tmp)
-        script = Path(tmp) / "alumno.R"
-        # Ver resultados intermedios como en la consola de R (echo de cada expresión).
-        script.write_text(prepared, encoding="utf-8")
-        shutil.copy(RUNNER_R, Path(tmp) / "_run.R")  # ejecuta bloque a bloque y guarda gráficos
-        try:
-            p = subprocess.run([_rscript(), "--vanilla", "_run.R"], cwd=tmp, capture_output=True,
-                               text=True, encoding="utf-8", errors="replace", timeout=config.R_TIMEOUT,
-                               preexec_fn=None if sys.platform == "win32" else _limits, env=_env(tmp))
-            res = RResult(p.returncode == 0, p.stdout[-MAX_OUT:], p.stderr[-MAX_OUT:], p.returncode,
-                          False, prepared, changes, _plots(tmp))
-        except subprocess.TimeoutExpired as e:
-            res = RResult(False, (e.stdout or b"").decode(errors="replace")[-MAX_OUT:] if isinstance(e.stdout, bytes) else (e.stdout or "")[-MAX_OUT:],
-                          f"Tiempo límite ({config.R_TIMEOUT}s) excedido", None, True, prepared, changes,
-                          _plots(tmp))
+    rscript = _rscript()
+    # Paquetes: instalar los que falten (en data/Rlib, desde CRAN)
+    pkgs = list(dict.fromkeys(r_packages.explicit(code) + r_packages.inferred(code)))
+    new, failed = r_packages.ensure(pkgs, rscript, _env(str(config.DATA_DIR)))
+    changes += [f"instalado el paquete {p} (no estaba en este computador)" for p in new]
+    changes += [f"no se pudo instalar el paquete {p}: sus errores NO son del alumno" for p in failed]
+    r = _execute(prepared, data_files, rscript, None)
+    # Reintento: base de datos guardada con otro nombre que el alumno no pegó
+    extra = _retry_vars(prepared, r["stderr"], names)
+    if extra:
+        pre = [f"{v} <- {_reader(names[0])}" for v in extra]
+        prepared = "\n".join(pre) + "\n" + prepared
+        changes += [f"precargado (supuesto, R no encontraba '{v}'): {l}" for v, l in zip(extra, pre)]
+        r = _execute(prepared, data_files, rscript, None)
+    res = RResult(r["ok"], r["stdout"], r["stderr"], r["returncode"], r["timed_out"], prepared, changes,
+                  r["plots"])
     store.cache_set(key, res.to_dict())
     return res
