@@ -43,7 +43,7 @@ async function load(refresh = false) {
   $("#list").innerHTML = '<p class="muted">Cargando desde Canvas…</p>';
   const r = await api(`/api/eval/${aid}?day=${encodeURIComponent(day)}&group=${encodeURIComponent(group)}&refresh=${refresh}`);
   S.info = r.info; S.students = r.students; S.cur = -1;
-  $("#mode").textContent = r.info.dry_run ? "MODO PRUEBA (no envía)" : "ENVÍO REAL";
+  $("#mode").textContent = r.info.dry_run ? "Modo prueba: no envía" : "Envío real a Canvas";
   $("#mode").className = r.info.dry_run ? "dry" : "live";
   $("#student").innerHTML = "";
   renderList();
@@ -58,7 +58,7 @@ function renderList() {
   for (const [st, title] of Object.entries(ORDER)) {
     const rows = S.students.map((s, i) => [s, i]).filter(([s]) => s.status === st);
     if (!rows.length) continue;
-    html += `<h4>${title} (${rows.length})</h4>`;
+    html += `<h4>${title} <span class="n">${rows.length}</span></h4>`;
     for (const [s, i] of rows) {
       const app = s.app ? `<span class="badge" title="Enviado desde esta app">${s.app.dry_run ? "prueba" : "✓ app"}</span>` : "";
       const warn = s.warnings.length ? `<span class="warn" title="${esc(s.warnings.join("; "))}">⚠</span>` : "";
@@ -71,7 +71,9 @@ function renderList() {
   $("#list").querySelectorAll(".st").forEach((el) => (el.onclick = () => select(+el.dataset.i)));
   const done = S.students.filter((s) => s.status === "revisado" || s.app).length;
   const total = S.students.filter((s) => s.status !== "sin_entrega" && s.status !== "no_encontrado").length;
-  $("#progress").textContent = `${done} / ${total} revisados`;
+  $("#progress").innerHTML = `<b>${done}</b> de ${total} revisados`;
+  $("#progress-bar").style.width = total ? `${(100 * done) / total}%` : "0";
+  $("#meter").hidden = false;
 }
 
 // ---------- alumno ----------
@@ -83,8 +85,8 @@ async function select(i) {
   $("#grade-msg").textContent = ""; $("#comment").value = ""; $("#custom").value = "";
   if (!s.user_id || s.status === "sin_entrega") {
     S.student = null; S.fr = [];
-    $("#student").innerHTML = `<div class="card"><h3>${esc(s.name)}</h3><p class="muted">${s.user_id ? "No respondió esta evaluación." : "No se encontró en Canvas."}</p>
-      ${s.warnings.map((w) => `<div class="warn small">⚠ ${esc(w)}</div>`).join("")}</div>`;
+    $("#student").innerHTML = `<div class="card sheet-head"><h3>${esc(s.name)}</h3><p class="muted">${s.user_id ? "No respondió esta evaluación." : "No se encontró en Canvas."}</p>
+      ${s.warnings.map((w) => `<div class="note warn small">⚠ ${esc(w)}</div>`).join("")}</div>`;
     renderGrade(); renderAI(); return;
   }
   $("#student").innerHTML = '<p class="muted">Cargando…</p>';
@@ -120,15 +122,17 @@ function fragmentOf(it) {
 function renderStudent() {
   const s = S.students[S.cur], st = S.student;
   const taller = isTaller();
-  const head = `<div class="card"><div class="row" style="justify-content:space-between">
+  const head = `<div class="card sheet-head"><div class="row" style="justify-content:space-between">
       <h3>${esc(s.name)}</h3><a class="small" href="${st.speedgrader}" target="_blank" rel="noopener">abrir en SpeedGrader ↗</a></div>
-    <div class="small muted">Nota actual en Canvas: <b>${st.score != null ? fmt(st.score) : "—"}</b> / ${st.points_possible} · ${st.status}${st.late ? ' · <span class="bad">atrasado</span>' : ""}</div>
-    ${s.warnings.map((w) => `<div class="warn small">⚠ ${esc(w)}</div>`).join("")}
-    ${st.comments.map((c) => `<div class="small">💬 <b>${esc(c.author)}</b>: ${esc(c.text)}</div>`).join("")}
+    <div class="grade muted">Nota actual en Canvas: <b>${st.score != null ? fmt(st.score) : "—"}</b> / ${st.points_possible} · ${st.status}${st.late ? ' · <span class="bad">atrasado</span>' : ""}</div>
+    ${s.warnings.map((w) => `<div class="note warn small">⚠ ${esc(w)}</div>`).join("")}
+    ${st.comments.map((c) => `<div class="note msg small"><b>${esc(c.author)}</b>: ${esc(c.text)}</div>`).join("")}
     <details class="ctx"><summary class="small">Contexto${st.files.length ? " · BD: " + st.files.map(esc).join(", ") : ""}</summary><pre>${esc(st.context)}</pre></details></div>`;
 
   const items = st.items.map((it, k) => {
-    const mark = it.canvas_correct === true ? '<span class="ok">✔ correcta</span>' : it.canvas_correct === false ? '<span class="bad">✘ incorrecta</span>' : "";
+    const mark = (it.canvas_correct === true ? '<span class="chip ok">✔ correcta</span>' : it.canvas_correct === false ? '<span class="chip bad">✘ incorrecta</span>' : "") +
+      (it.canvas_flag != null && it.canvas_flag !== it.canvas_correct
+        ? ` <span class="muted" title="Canvas guardó esta marca al momento de la entrega; después cambió la clave de la pregunta o se ajustó el puntaje. Aquí se compara con la clave actual.">(al entregar Canvas la marcó ${it.canvas_flag ? "✔" : "✘"})</span>` : "");
     const opts = Object.values(it.answer_q.options || {});
     const optHtml = opts.length ? `<ul class="opts">${opts.map((o) => `<li class="${o === it.answer_q.correct ? "right" : ""} ${o === it.answer_text ? "chosen" : ""}">${esc(o)}</li>`).join("")}</ul>` : "";
     const frag = fragmentOf(it);
@@ -139,11 +143,11 @@ function renderStudent() {
     else if (frag) codeHtml = `<div class="small muted">Código de esta pregunta — ${frag.src}</div>${codeBlock(st.code, frag.lines)}`;
     else codeHtml = `<div class="small warn">No se identificó el código de esta pregunta (pide la sugerencia IA o revisa el código completo).</div>`;
     return `<div class="card item ${taller && k === S.item ? "active" : ""}" data-k="${k}">
-      <div class="row" style="justify-content:space-between"><b>${taller ? `${esc(it.label)} · ${fmt(it.points)} pts` : "Pregunta"}</b>
+      <div class="row qhead"><span class="qlabel">${taller ? `${esc(it.label)}<small>${fmt(it.points)} pts</small>` : "Pregunta"}</span>
         <span class="small">${mark} <span class="muted">(Canvas: ${fmt(it.canvas_points)})</span></span></div>
       <details ${it.answer_q.text.length < 450 ? "open" : ""}><summary class="small muted">Enunciado</summary><pre>${esc(it.answer_q.text)}</pre></details>
       ${optHtml}
-      <div class="small">Respuesta: <b>${esc(it.answer_text)}</b>${opts.length ? "" : ` <span class="muted">· correcta: ${esc(it.answer_q.correct || "?")}</span>`}</div>
+      <div class="small answer">Respuesta: <b>${esc(it.answer_text)}</b>${opts.length ? "" : ` <span class="muted">· correcta: ${esc(it.answer_q.correct || "?")}</span>`}</div>
       ${codeHtml}
     </div>`;
   }).join("");
@@ -191,7 +195,7 @@ function renderGrade() {
     `<button data-k="${k}" class="${k === S.item ? "on" : ""}">${esc(it.label)}<br><small>${S.fr[k] == null ? "—" : fmt(S.fr[k] * it.points) + "/" + fmt(it.points)}</small></button>`).join("")}</div>` : "";
   const cur = S.fr[S.item];
   $("#levels").innerHTML = tabs + lv.map((l) => `<button data-v="${l.score}" class="lvl ${cur === l.score ? "on" : ""}" title="${esc(l.note)}">
-      <b>${l.score}</b> — ${esc(l.description)}${sug === l.score ? '<span class="sug">IA sugiere</span>' : ""}</button>`).join("") +
+      <b>${l.score}</b><span class="desc">${esc(l.description)}${sug === l.score ? '<span class="sug">IA sugiere</span>' : ""}</span></button>`).join("") +
     (S.info?.rubric_note ? `<div class="small muted">${esc(S.info.rubric_note)}</div>` : "") +
     (S.info?.pauta_extra ? `<details class="small excepcion" open><summary><b>Excepción de esta evaluación</b></summary><pre>${esc(S.info.pauta_extra)}</pre></details>` : "");
   $("#levels").querySelectorAll(".lvl").forEach((b) => (b.onclick = () => setScore(+b.dataset.v)));

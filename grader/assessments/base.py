@@ -27,6 +27,7 @@ class Question:
     position: int
     correct: str              # descripción legible de la respuesta correcta
     options: dict[int, str]   # selección múltiple: id → texto
+    keys: list[dict] = field(default_factory=list)  # respuestas con peso 100 (clave actual)
 
     @classmethod
     def from_canvas(cls, q, idx, group_points: dict | None = None):
@@ -38,7 +39,10 @@ class Question:
         return cls(id=q["id"], type=q["question_type"], html=q.get("question_text") or "",
                    text=html_to_text(q.get("question_text")), points=float(pts or 0),
                    group_id=gid, position=q.get("position") or idx,
-                   correct=describe_correct(q), options=opts)
+                   correct=describe_correct(q), options=opts,
+                   keys=[{k: a.get(k) for k in ("id", "numerical_answer_type", "exact", "margin", "start", "end",
+                                                "approximate", "precision", "text")}
+                         for a in q.get("answers") or [] if (a.get("weight") or 0) >= 100])
 
     @property
     def is_base(self):
@@ -53,6 +57,54 @@ class Question:
             if aid is not None:
                 return self.options.get(int(aid), f"(opción {aid})")
         return html_to_text(d.get("text"))
+
+
+def parse_number(text) -> float | None:
+    """Número escrito por el alumno: '0.4458', '0,4458' (coma decimal), '20,254.5', '61,590', '35%'."""
+    t = re.sub(r"[\s$]", "", str(text or ""))
+    pct = t.endswith("%")
+    t = t.rstrip("%")
+    if not t:
+        return None
+    if "," in t and "." in t:
+        t = t.replace(",", "")
+    elif "," in t:
+        # miles solo si es del tipo 61,590 o 1,234,567 (y no empieza en 0); si no, coma decimal
+        t = t.replace(",", "") if re.fullmatch(r"[1-9]\d{0,2}(,\d{3})+", t) else t.replace(",", ".")
+    try:
+        v = float(t)
+    except ValueError:
+        return None
+    return v / 100 if pct else v
+
+
+def check_answer(q: "Question", d: dict) -> bool | None:
+    """¿La respuesta coincide con la clave ACTUAL de la pregunta? None si no se puede saber."""
+    if not q.keys:
+        return None
+    if q.type == "numerical_question":
+        v = parse_number(d.get("text"))
+        if v is None:
+            return False if str(d.get("text") or "").strip() else None
+        for k in q.keys:
+            t = k.get("numerical_answer_type") or "exact_answer"
+            if t == "exact_answer" and k.get("exact") is not None:
+                if abs(v - float(k["exact"])) <= float(k.get("margin") or 0) + 1e-9:
+                    return True
+            elif t == "range_answer" and k.get("start") is not None:
+                if float(k["start"]) - 1e-9 <= v <= float(k["end"]) + 1e-9:
+                    return True
+            elif t == "precision_answer" and k.get("approximate") is not None:
+                p = int(k.get("precision") or 0)
+                if p and float(f"{v:.{p}g}") == float(f"{float(k['approximate']):.{p}g}"):
+                    return True
+        return False
+    if q.type in ("multiple_choice_question", "true_false_question"):
+        aid = d.get("answer_id")
+        if aid is None and str(d.get("text") or "").isdigit():
+            aid = int(d["text"])
+        return None if aid is None else int(aid) in {k["id"] for k in q.keys}
+    return None
 
 
 def describe_correct(q) -> str:
@@ -79,7 +131,7 @@ class Item:
     label: str
     answer_q: Question
     answer_text: str
-    canvas_correct: bool | None
+    canvas_correct: bool | None   # según la clave ACTUAL de la pregunta (recalculado)
     canvas_points: float
     code_q: Question | None
     code_text: str
@@ -87,6 +139,7 @@ class Item:
     fragment_source: str = "todo"  # todo | comentarios | ia | no detectado
     code_source: str = "canvas"     # canvas | buzón (parche local)
     code_in_submission: bool = True  # False si la entrega no incluye la pregunta de código
+    canvas_flag: bool | None = None  # marca guardada por Canvas al entregar (puede quedar obsoleta)
 
     @property
     def points(self):
@@ -162,7 +215,8 @@ class AssessmentType:
             items.append(Item(
                 n=n, label=f"P{n}", answer_q=q,
                 answer_text=q.student_answer(d) or "(sin respuesta)",
-                canvas_correct=parse_correct(d.get("correct")),
+                canvas_correct=(lambda c: parse_correct(d.get("correct")) if c is None else c)(check_answer(q, d)),
+                canvas_flag=parse_correct(d.get("correct")),
                 canvas_points=float(d.get("points") or 0),
                 code_q=code_q, code_text=code_text,
                 code_in_submission=bool(code_q and code_q.id in data)))

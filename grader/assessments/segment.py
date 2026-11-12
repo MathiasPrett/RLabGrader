@@ -19,6 +19,8 @@ _HASH = re.compile(rf"^\s*#+[\s#*=_\-]*(?:{_WORD}[\s._]*(?:n[°º]\s*)?)?(\d{{1,
 _WORD_ONLY = re.compile(rf"^\s*{_WORD}[\s._]*(?:n[°º]\s*)?(\d{{1,2}})\s*[:.)\-–]*\s*$", re.I)
 # Sin '#': "1.- código", "4. boxplot(...)", "5." , "2) ..."  (no "1 - pnorm(...)", que es R válido)
 _NUM_PREFIX = re.compile(r"^\s*(\d{1,2})(?:\.-|\.(?![\d\w])|\))\s*(.*)$")
+# Título al final de una línea de código: "x <- datos[...] # Pregunta 1", "mean(y)  #P2"
+_TRAILING = re.compile(rf"^[^#]*\S[^#]*#+\s*{_WORD}[\s._]*(?:n[°º]\s*)?(\d{{1,2}})\s*[:.)\-–]*\s*$", re.I)
 # Ordinales: "primera pregunta", "pregunta segunda" (con o sin '#')
 _ORDINAL = re.compile(rf"^\s*#*[\s#*=_\-]*(?:({_ORD})[\s_]+pregunta|pregunta[\s_]+({_ORD}))", re.I)
 
@@ -35,6 +37,10 @@ def header_number(line: str, max_n: int = 20) -> tuple[int, bool, str] | None:
         return (n, True, "") if 1 <= n <= max_n else None
     if line.lstrip().startswith(">"):
         return None
+    m = _TRAILING.match(line)
+    if m:  # la línea es código válido: no hay que comentarla
+        n = int(m.group(1))
+        return (n, True, "") if 1 <= n <= max_n else None
     m = _WORD_ONLY.match(line)
     if m:
         n = int(m.group(1))

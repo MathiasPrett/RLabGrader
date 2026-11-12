@@ -4,69 +4,99 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>RLabGrader</title>
+<link rel="icon" type="image/svg+xml" href="/static/logo.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/r.min.js"></script>
-<link rel="stylesheet" href="/static/app.css">
+<link rel="stylesheet" href="/static/app.css?v=4">
 </head>
 <body>
 <header>
-  <strong>RLabGrader</strong>
-  <select id="sel-eval" title="Evaluación"></select>
-  <select id="sel-day" title="Día"></select>
-  <select id="sel-group" title="Grupo"></select>
-  <button id="btn-load">Cargar</button>
-  <button id="btn-refresh" title="Volver a leer todo desde Canvas">↻ Canvas</button>
-  <button id="btn-res">Recursos</button>
-  <span id="progress"></span>
-  <span id="mode"></span>
+  <a class="brand" href="/" title="RLabGrader">
+    <img src="/static/logo.svg" alt="" width="28" height="28">
+    <span>RLab<b>Grader</b></span>
+  </a>
+
+  <div class="picker">
+    <label class="pick"><span>Evaluación</span><select id="sel-eval"></select></label>
+    <label class="pick"><span>Día</span><select id="sel-day"></select></label>
+    <label class="pick"><span>Grupo</span><select id="sel-group"></select></label>
+    <button id="btn-load" class="ink">Cargar</button>
+  </div>
+
+  <div class="meter" id="meter" hidden>
+    <span id="progress"></span>
+    <span class="bar"><i id="progress-bar"></i></span>
+  </div>
+
+  <div class="head-actions">
+    <button id="btn-refresh" class="quiet" title="Volver a leer todo desde Canvas">Actualizar desde Canvas</button>
+    <button id="btn-res" class="quiet">Recursos</button>
+    <span id="mode"></span>
+  </div>
 </header>
 
 <main>
-  <aside id="list"><p class="muted">Elige evaluación, día y grupo.</p></aside>
+  <aside id="list">
+    <div class="empty">
+      <img src="/static/logo.svg" alt="" width="40" height="40">
+      <p>Elige evaluación, día y grupo arriba y presiona <b>Cargar</b>.</p>
+    </div>
+  </aside>
 
   <section id="center">
-    <div id="student" class="muted">—</div>
+    <div id="student"></div>
   </section>
 
   <section id="right">
-    <div class="card">
+    <div class="card tools">
       <div class="row">
-        <button id="btn-run" title="r">▶ Ejecutar R</button>
-        <button id="btn-ai" title="i">✨ Sugerencia IA</button>
+        <button id="btn-run" title="Atajo: r"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.8v8.4L10 6z"/></svg>Ejecutar R</button>
+        <button id="btn-ai" title="Atajo: i">Sugerencia IA</button>
       </div>
       <div id="ai" class="muted small">La IA solo recomienda. Tú decides.</div>
     </div>
     <div class="card" id="grade-card">
       <h3>Tu corrección</h3>
       <div id="levels"></div>
-      <label class="small">Otro puntaje (0–1): <input id="custom" type="number" step="0.05" min="0" max="1"></label>
+      <label class="small custom">Otro puntaje (0–1) <input id="custom" type="number" step="0.05" min="0" max="1"></label>
       <div id="total" class="small"></div>
       <textarea id="comment" rows="5" placeholder="Comentario para el alumno (opcional)"></textarea>
-      <button id="btn-comment" title="c">Armar comentario desde la IA</button>
+      <button id="btn-comment" class="quiet" title="Atajo: c">Armar comentario desde la IA</button>
       <button id="btn-grade" class="primary" title="Ctrl+Enter">Confirmar y subir a Canvas</button>
       <div id="grade-msg" class="small"></div>
     </div>
-    <details class="card small"><summary>Atajos</summary>
-      j / k: alumno siguiente / anterior · Tab: pregunta siguiente (talleres) · 0 5 7 1: puntaje (salta a la próxima pregunta) · r: ejecutar R · i: IA · c: armar comentario · Ctrl+Enter: confirmar
+    <details class="card small keys"><summary>Atajos de teclado</summary>
+      <dl>
+        <dt><kbd>j</kbd> <kbd>k</kbd></dt><dd>Alumno siguiente / anterior</dd>
+        <dt><kbd>Tab</kbd></dt><dd>Pregunta siguiente (talleres)</dd>
+        <dt><kbd>0</kbd> <kbd>5</kbd> <kbd>7</kbd> <kbd>1</kbd></dt><dd>Poner puntaje y pasar a la próxima pregunta</dd>
+        <dt><kbd>r</kbd></dt><dd>Ejecutar R</dd>
+        <dt><kbd>i</kbd></dt><dd>Pedir sugerencia IA</dd>
+        <dt><kbd>c</kbd></dt><dd>Armar comentario</dd>
+        <dt><kbd>Ctrl</kbd> <kbd>Enter</kbd></dt><dd>Confirmar y subir</dd>
+      </dl>
     </details>
   </section>
 </main>
 
 <dialog id="dlg-res">
   <h3>Recursos de la evaluación</h3>
-  <p class="small">Bases de datos (se copian al ejecutar R y la IA ve una muestra):</p>
+  <p class="small muted">Bases de datos: se copian al ejecutar R y la IA ve una muestra.</p>
   <ul id="res-files"></ul>
   <input type="file" id="res-upload" accept=".csv,.txt,.tsv,.xlsx,.xls,.dat">
-  <p class="small">Solución de referencia en R (opcional; no es la única válida):</p>
+  <p class="small muted">Solución de referencia en R (opcional; no es la única válida).</p>
   <textarea id="res-solution" rows="8" spellcheck="false"></textarea>
-  <button id="res-run">▶ Probar solución</button>
+  <button id="res-run"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.8v8.4L10 6z"/></svg>Probar solución</button>
   <pre id="res-out" class="out hidden"></pre>
-  <p class="small">Notas para la IA (criterios propios, errores frecuentes...):</p>
+  <p class="small muted">Notas para la IA: criterios propios, errores frecuentes…</p>
   <textarea id="res-notes" rows="4"></textarea>
-  <div class="row"><button id="res-save" class="primary">Guardar</button><button id="res-close">Cerrar</button></div>
+  <div class="row end"><button id="res-close" class="quiet">Cerrar</button><button id="res-save" class="primary">Guardar</button></div>
 </dialog>
 
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v=4"></script>
 </body>
 </html>
