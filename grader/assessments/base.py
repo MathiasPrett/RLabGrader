@@ -145,12 +145,6 @@ class Item:
     def points(self):
         return self.answer_q.points
 
-    def fragment(self) -> str:
-        if not self.fragment_lines:
-            return self.code_text
-        lines = self.code_text.splitlines()
-        return "\n".join("\n".join(lines[a - 1:b]) for a, b in self.fragment_lines)
-
     def to_dict(self):
         d = asdict(self)
         d["points"] = self.points

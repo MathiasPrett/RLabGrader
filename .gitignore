@@ -18,9 +18,9 @@ credentials*
 
 # --- Datos de estudiantes y del curso --------------------------------
 # Listas de alumnos, notas exportadas de Canvas, planillas de coordinación
-docs/
 data/
-out/
+planilla/*
+!planilla/LEEME.md
 *.csv
 *.tsv
 *.xlsx
@@ -33,12 +33,8 @@ out/
 *.db
 *.sqlite
 *.sqlite3
-submission_debug.json
-t.txt
 
-# Scripts personales de exploración (contienen IDs reales de Canvas)
-main.py
-inspect_response.py
+# Scripts personales de exploración
 scratch/
 notebooks/
 

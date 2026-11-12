@@ -18,7 +18,21 @@ GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
 # Con DRY_RUN=1 las escrituras a Canvas solo se registran, no se envían.
 DRY_RUN = os.environ.get("DRY_RUN", "1") not in ("0", "false", "False", "")
 
-ROSTER_XLSX = ROOT / os.environ.get("ROSTER_XLSX", "docs/CoordAyudantes.xlsx")
+PORT = int(os.environ.get("PORT") or 8765)
+
+# Planilla de coordinación de ayudantes: el .xlsx dentro de planilla/
+# (o la ruta indicada en ROSTER_XLSX, si se define).
+ROSTER_DIR = ROOT / "planilla"
+
+
+def _find_roster() -> Path:
+    if os.environ.get("ROSTER_XLSX"):
+        return ROOT / os.environ["ROSTER_XLSX"]
+    found = sorted(p for p in ROSTER_DIR.glob("*.xlsx") if not p.name.startswith("~$"))
+    return found[0] if found else ROSTER_DIR / "planilla.xlsx"
+
+
+ROSTER_XLSX = _find_roster()
 DATA_DIR = ROOT / "data"
 EVAL_DIR = DATA_DIR / "evaluaciones"
 DB_PATH = DATA_DIR / "grader.db"

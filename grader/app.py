@@ -1,4 +1,4 @@
-"""Servidor web local. Uso: uv run uvicorn grader.app:app --port 8000"""
+"""Servidor web local. Se inicia con: uv run main.py"""
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile

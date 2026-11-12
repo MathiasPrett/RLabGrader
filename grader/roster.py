@@ -28,6 +28,9 @@ class RosterEntry:
 
 
 def read_excel(path=config.ROSTER_XLSX):
+    if not path.exists():
+        raise ValueError(f"No se encontró la planilla de ayudantes: copia el .xlsx en la carpeta "
+                         f"'{config.ROSTER_DIR.name}/' ({config.ROSTER_DIR})")
     ws = openpyxl.load_workbook(path, read_only=True, data_only=True)[SHEET]
     rows = ws.iter_rows(min_row=2, values_only=True)
     return [RosterEntry(name=r[1].strip(), section=r[2], day=r[3], group=r[4])

@@ -37,7 +37,14 @@ alumnos, su respuesta, su código R ejecutado y, si lo pides, una **primera opin
 ## Instalación paso a paso
 
 Necesitas 4 cosas: **uv** (para correr el programa), **R**, un **token de Canvas** y (opcional) una
-**API key de Groq** para la IA. Todo es gratis.
+**API key de Groq** para la IA. Todo es gratis. Además necesitas la **planilla de coordinación de
+ayudantes** (el Excel con los alumnos y grupos).
+
+**Resumen rápido** (si ya tienes todo):
+
+1. Copia `.env.example` como `.env` y completa `CANVAS_TOKEN` y `COURSE_ID`.
+2. Copia el Excel de coordinación de ayudantes en la carpeta **`planilla/`**.
+3. Ejecuta `uv run main.py`. Se abre el navegador en <http://localhost:8765>.
 
 ### 1. Instalar uv
 
@@ -115,28 +122,48 @@ En la carpeta de RLabGrader hay un archivo llamado `.env.example`. Haz una copia
 | `CANVAS_TOKEN` | El token del paso 4 |
 | `COURSE_ID` | El número del curso: en Canvas, entra al curso y míralo en la URL (`.../courses/123456`) |
 | `GROQ_API_KEY` | La clave del paso 5 (opcional) |
-| `ROSTER_XLSX` | Ruta a la planilla de coordinación de ayudantes (ver abajo) |
 | `DRY_RUN` | `1` = modo prueba, no envía nada. `0` = envío real a Canvas |
 
 > El archivo `.env` contiene tus claves: **no lo compartas** ni lo subas a internet.
 > El repositorio ya está configurado para que git lo ignore.
 
-**Planilla de coordinación:** un Excel (`.xlsx`) con una hoja llamada `Secciones M y J` con las
-columnas `Sección`, `Student` (formato "Apellidos, Nombres", igual que en Canvas), `Section`, `DÍA`
-(M/J) y `Grupos`. Las pautas se leen de las hojas `Pauta Bonos` y `Pauta Taller (tentativa)` si
-existen. Guárdala, por ejemplo, en una carpeta `docs/` (también ignorada por git).
+### 7. Poner la planilla de alumnos en la carpeta `planilla/`
 
-### 7. Abrir la app
+Copia el Excel de **coordinación de ayudantes** (el `.xlsx` con los alumnos y sus grupos) dentro de
+la carpeta **`planilla/`** del proyecto. El nombre del archivo da igual: la app usa el `.xlsx` que
+encuentre ahí (deja uno solo).
+
+```
+RLabGrader/
+├── planilla/
+│   └── CoordAyudantes.xlsx   ← aquí va el Excel con los estudiantes
+├── .env                      ← tus claves (paso 6)
+└── main.py
+```
+
+El Excel debe tener:
+
+- Una hoja llamada **`Secciones M y J`** con las columnas `Sección`, `Student` (formato
+  "Apellidos, Nombres", igual que en Canvas), `Section`, `DÍA` (`M` o `J`) y `Grupos`.
+- (Opcional) Las hojas **`Pauta Bonos`** y **`Pauta Taller (tentativa)`** con las pautas.
+
+Lo que pongas en `planilla/` **no se sube a git** (son datos de estudiantes).
+
+### 8. Abrir la app
 
 En la terminal, dentro de la carpeta de RLabGrader:
 ```bash
-uv run uvicorn grader.app:app --port 8765
+uv run main.py
 ```
-La primera vez tarda un poco porque uv descarga Python y las dependencias. Cuando aparezca
-`Uvicorn running on http://127.0.0.1:8765`, abre esa dirección en tu navegador:
-**<http://localhost:8765>**.
+La primera vez tarda un poco porque uv descarga Python y las dependencias. Luego se abre solo el
+navegador en **<http://localhost:8765>** (si no, abre esa dirección a mano). En la terminal verás
+avisos si falta algo por configurar (el `.env`, el token, la planilla…) y si estás en modo prueba
+o envío real.
 
 Para cerrarla, vuelve a la terminal y presiona `Ctrl + C`. Para usarla otro día, repite solo este paso.
+
+Opciones: `uv run main.py --no-browser` no abre el navegador; para usar otro puerto agrega
+`PORT=8000` en el `.env`.
 
 ---
 
@@ -184,7 +211,8 @@ Si borras el archivo, la evaluación vuelve a funcionar como siempre.
 - El código de los alumnos se ejecuta en una carpeta temporal, con tiempo y memoria limitados y
   **sin acceso a tus claves**. No es un aislamiento completo: no ejecutes código que te parezca
   malicioso.
-- Las bases de datos, notas y caché quedan en `data/` (ignorada por git).
+- Las bases de datos, notas y caché quedan en `data/` y la planilla en `planilla/` (ambas
+  ignoradas por git).
 
 ---
 
@@ -192,6 +220,9 @@ Si borras el archivo, la evaluación vuelve a funcionar como siempre.
 
 | Ruta | Qué contiene |
 |---|---|
+| `main.py` | Punto de entrada: `uv run main.py` |
+| `planilla/` | **Aquí va el Excel de coordinación de ayudantes** (no se sube a git) |
+| `data/` | Se crea sola: caché, bases de datos, paquetes R y parches locales (no se sube a git) |
 | `grader/canvas_client.py` | Conexión con la API de Canvas |
 | `grader/roster.py` | Cruce de la planilla de grupos con los alumnos de Canvas |
 | `grader/assessments/` | Tipos de evaluación (bono, taller), pautas y separación del código por pregunta |
