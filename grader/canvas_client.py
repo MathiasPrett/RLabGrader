@@ -46,8 +46,9 @@ class CanvasClient:
             url, params = r.links.get("next", {}).get("url"), None
         return items
 
-    def put(self, path, json_body):
-        if config.DRY_RUN:
+    def put(self, path, json_body, dry_run: bool = True):
+        """Escritura en Canvas. Por omisión NO envía (modo prueba): hay que pedirlo explícitamente."""
+        if dry_run:
             log.warning("DRY_RUN PUT %s %s", path, json_body)
             return {"dry_run": True, "path": path, "body": json_body}
         return self._check(self.s.put(self._url(path), json=json_body, timeout=30)).json()
@@ -107,14 +108,14 @@ class CanvasClient:
         )
 
     # ---------- escritura ----------
-    def set_question_scores(self, quiz_id, quiz_submission_id, attempt, scores):
+    def set_question_scores(self, quiz_id, quiz_submission_id, attempt, scores, dry_run: bool = True):
         """scores: {question_id: puntaje}. Solo cambia esas preguntas."""
         body = {"quiz_submissions": [{
             "attempt": attempt,
             "questions": {str(q): {"score": s} for q, s in scores.items()},
         }]}
-        return self.put(f"{self.c}/quizzes/{quiz_id}/submissions/{quiz_submission_id}", body)
+        return self.put(f"{self.c}/quizzes/{quiz_id}/submissions/{quiz_submission_id}", body, dry_run)
 
-    def add_comment(self, assignment_id, user_id, text):
+    def add_comment(self, assignment_id, user_id, text, dry_run: bool = True):
         body = {"comment": {"text_comment": text}}
-        return self.put(f"{self.c}/assignments/{assignment_id}/submissions/{user_id}", body)
+        return self.put(f"{self.c}/assignments/{assignment_id}/submissions/{user_id}", body, dry_run)

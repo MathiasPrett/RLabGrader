@@ -1,7 +1,7 @@
 // RLabGrader — interfaz. La IA solo sugiere; nada se envía sin "Confirmar".
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const S = { evals: [], info: null, students: [], cur: -1, student: null, item: 0, fr: [], ai: null, rr: null };
+const S = { evals: [], info: null, students: [], cur: -1, student: null, item: 0, fr: [], ai: null, rr: null, q: "" };
 
 async function api(path, opts = {}) {
   const r = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
@@ -18,6 +18,25 @@ const LS = { get: (k) => { try { return localStorage.getItem(k); } catch { retur
              set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 const fmt = (x) => (Math.round(x * 100) / 100).toString();
 const hl = (code) => { try { return hljs.highlight(code, { language: "r" }).value; } catch { return esc(code); } };
+const fold = (s) => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const dryRun = () => !$("#live").checked;  // interruptor: encendido = envío real
+const visible = (s) => !S.q || fold(s.name).includes(S.q);
+function renderMode() {
+  const live = $("#live").checked;
+  $("#mode").textContent = live ? "Envío real a Canvas" : "Modo prueba: no envía";
+  $("#mode").className = live ? "live" : "dry";
+}
+// Fórmulas LaTeX en enunciados (solo \( \), \[ \] y $$ $$: el $ suelto se usa para dinero)
+function renderMath(root) {
+  if (!window.renderMathInElement || !root) return;
+  root.querySelectorAll(".item details pre, .ctx pre, .opts li").forEach((el) =>
+    renderMathInElement(el, {
+      delimiters: [{ left: "$$", right: "$$", display: true }, { left: "\\[", right: "\\]", display: true },
+                   { left: "\\(", right: "\\)", display: false }],
+      ignoredTags: ["script", "noscript", "style", "textarea", "code", "option"],
+      throwOnError: false,
+    }));
+}
 const isTaller = () => S.student?.items.length > 1 || S.info?.type === "taller";
 
 // ---------- inicio ----------
@@ -29,26 +48,21 @@ async function init() {
     return xs.length ? `<optgroup label="${label}">${xs.map((e) => `<option value="${e.id}">${esc(e.name.trim())}</option>`).join("")}</optgroup>` : "";
   };
   $("#sel-eval").innerHTML = opt("bono", "Bonos") + opt("taller", "Talleres");
-  $("#sel-day").innerHTML = Object.keys(groups).map((d) => `<option>${d}</option>`).join("");
-  const fillGroups = () => ($("#sel-group").innerHTML = groups[$("#sel-day").value].map((g) => `<option>${g}</option>`).join(""));
-  $("#sel-day").onchange = fillGroups;
-  for (const k of ["eval", "day"]) if (LS.get(k) && [...$("#sel-" + k).options].some((o) => o.value === LS.get(k))) $("#sel-" + k).value = LS.get(k);
-  fillGroups();
-  if (LS.get("group")) $("#sel-group").value = LS.get("group");
+  $("#sel-group").innerHTML = groups.map((g) => `<option>${esc(g)}</option>`).join("");
+  for (const k of ["eval", "group"]) if (LS.get(k) && [...$("#sel-" + k).options].some((o) => o.value === LS.get(k))) $("#sel-" + k).value = LS.get(k);
+  renderMode();
 }
 
 async function load(refresh = false) {
-  const aid = $("#sel-eval").value, day = $("#sel-day").value, group = $("#sel-group").value;
-  ["eval", "day", "group"].forEach((k) => LS.set(k, $("#sel-" + k).value));
+  const aid = $("#sel-eval").value, group = $("#sel-group").value;
+  ["eval", "group"].forEach((k) => LS.set(k, $("#sel-" + k).value));
   $("#list").innerHTML = '<p class="muted">Cargando desde Canvas…</p>';
-  const r = await api(`/api/eval/${aid}?day=${encodeURIComponent(day)}&group=${encodeURIComponent(group)}&refresh=${refresh}`);
+  const r = await api(`/api/eval/${aid}?group=${encodeURIComponent(group)}&refresh=${refresh}`);
   S.info = r.info; S.students = r.students; S.cur = -1;
-  $("#mode").textContent = r.info.dry_run ? "Modo prueba: no envía" : "Envío real a Canvas";
-  $("#mode").className = r.info.dry_run ? "dry" : "live";
   $("#student").innerHTML = "";
   renderList();
-  const first = S.students.findIndex((s) => s.status === "pendiente");
-  select(first >= 0 ? first : S.students.findIndex((s) => s.status === "revisado"));
+  const first = S.students.findIndex((s) => s.status === "pendiente" && visible(s));
+  select(first >= 0 ? first : S.students.findIndex((s) => s.status === "revisado" && visible(s)));
 }
 
 // ---------- lista ----------
@@ -56,7 +70,7 @@ const ORDER = { pendiente: "Pendientes", revisado: "Ya revisados", sin_entrega: 
 function renderList() {
   let html = "";
   for (const [st, title] of Object.entries(ORDER)) {
-    const rows = S.students.map((s, i) => [s, i]).filter(([s]) => s.status === st);
+    const rows = S.students.map((s, i) => [s, i]).filter(([s]) => s.status === st && visible(s));
     if (!rows.length) continue;
     html += `<h4>${title} <span class="n">${rows.length}</span></h4>`;
     for (const [s, i] of rows) {
@@ -64,10 +78,10 @@ function renderList() {
       const warn = s.warnings.length ? `<span class="warn" title="${esc(s.warnings.join("; "))}">⚠</span>` : "";
       const sc = s.score != null && st !== "sin_entrega" ? `<span class="badge">${fmt(s.score)}</span>` : "";
       html += `<div class="st ${i === S.cur ? "sel" : ""}" data-i="${i}"><span class="dot ${st}"></span>
-        <span class="nm" title="${esc(s.name)}">${esc(s.name)}</span>${warn}${app}${sc}</div>`;
+        <span class="nm" title="${esc(s.name)}${s.group ? ` · ${esc(s.group)}` : ""}${s.day ? ` · día ${esc(s.day)}` : ""}${s.section ? ` · ${esc(s.section)}` : ""}">${esc(s.name)}</span>${warn}${app}${sc}</div>`;
     }
   }
-  $("#list").innerHTML = html || '<p class="muted">Sin alumnos.</p>';
+  $("#list").innerHTML = html || (S.q ? `<p class="muted nohit">Ningún alumno coincide con “${esc($("#search").value)}”.</p>` : '<p class="muted">Sin alumnos.</p>');
   $("#list").querySelectorAll(".st").forEach((el) => (el.onclick = () => select(+el.dataset.i)));
   const done = S.students.filter((s) => s.status === "revisado" || s.app).length;
   const total = S.students.filter((s) => s.status !== "sin_entrega" && s.status !== "no_encontrado").length;
@@ -156,6 +170,7 @@ function renderStudent() {
       <summary><b>Código completo</b> <span class="small muted">(${st.code.split("\n").length} líneas)</span></summary>
       ${st.code.trim() ? codeBlock(st.code, null, true) : '<p class="bad">(no entregó código)</p>'}</details>` : "";
   $("#student").innerHTML = head + (items || '<div class="card muted">Sin preguntas respondidas.</div>') + full + renderRun();
+  renderMath($("#student"));
   if (taller) $("#student").querySelectorAll(".item").forEach((el) => (el.onclick = (e) => {
     if (e.target.closest("summary,a")) return;
     setItem(+el.dataset.k, false);
@@ -285,10 +300,10 @@ async function grade() {
   if (S.fr.some((f) => f == null)) { renderGrade(); return alert("Falta elegir puntaje" + (st.items.length > 1 ? " en: " + st.items.filter((_, k) => S.fr[k] == null).map((i) => i.label).join(", ") : "")); }
   const s = S.students[S.cur], comment = $("#comment").value;
   const detail = st.items.map((it, k) => `${it.label}: ${S.fr[k]} × ${fmt(it.points)} = ${fmt(S.fr[k] * it.points)}`).join("\n");
-  const msg = `${s.name}\n${detail}\nTotal: ${fmt(total())}${st.base_points ? " (con punto base)" : ""}\n\nComentario: ${comment || "(ninguno)"}\n\n${S.info.dry_run ? "MODO PRUEBA: no se enviará a Canvas." : "Se enviará a Canvas."}`;
+  const msg = `${s.name}\n${detail}\nTotal: ${fmt(total())}${st.base_points ? " (con punto base)" : ""}\n\nComentario: ${comment || "(ninguno)"}\n\n${dryRun() ? "MODO PRUEBA: no se enviará a Canvas." : "⚠ ENVÍO REAL: se subirá a Canvas."}`;
   if (!confirm(msg)) return;
   await busy($("#btn-grade"), async () => {
-    const r = await post(`/api/eval/${S.info.id}/student/${s.user_id}/grade`, { fractions: S.fr, comment });
+    const r = await post(`/api/eval/${S.info.id}/student/${s.user_id}/grade`, { fractions: S.fr, comment, dry_run: dryRun() });
     $("#grade-msg").innerHTML = r.dry_run ? '<span class="warn">Registrado en modo prueba (no enviado).</span>'
       : `<span class="ok">Enviado. Nota en Canvas: ${fmt(r.new_score)}</span>`;
     s.app = { dry_run: r.dry_run }; if (!r.dry_run) { s.status = "revisado"; s.score = r.new_score; }
@@ -302,6 +317,7 @@ function next(d, pendingOnly = false) {
   for (let n = 0; n < S.students.length; n++) {
     i = (i + d + S.students.length) % S.students.length;
     const st = S.students[i].status;
+    if (!visible(S.students[i])) continue;
     if (pendingOnly ? st === "pendiente" && !S.students[i].app : st !== "no_encontrado") return select(i);
   }
 }
@@ -345,13 +361,22 @@ $("#res-upload").onchange = (e) => busy($("#res-save"), async () => {
   $("#res-files").innerHTML = r.files.map((x) => `<li>${esc(x)}</li>`).join("");
 });
 
+$("#live").onchange = renderMode;
+$("#search").oninput = () => { S.q = fold($("#search").value.trim()); if (S.students.length) renderList(); };
+$("#search").onkeydown = (e) => {  // Enter abre el primer alumno que coincide
+  if (e.key !== "Enter") return;
+  const i = S.students.findIndex((s) => visible(s) && s.status !== "no_encontrado");
+  if (i >= 0) { select(i); $("#search").blur(); }
+};
 document.addEventListener("keydown", (e) => {
   const typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+  if (e.key === "Escape" && document.activeElement === $("#search")) { $("#search").value = ""; $("#search").dispatchEvent(new Event("input")); $("#search").blur(); return; }
   if (e.ctrlKey && e.key === "Enter") { e.preventDefault(); grade(); return; }
   if (typing || $("#dlg-res").open || e.ctrlKey || e.metaKey || e.altKey) return;
   const map = { "0": 0, "5": 0.5, "7": 0.7, "1": 1 };
   if (e.key in map) setScore(map[e.key]);
   else if (e.key === "Tab" && S.student?.items.length > 1) { e.preventDefault(); setItem((S.item + (e.shiftKey ? -1 : 1) + S.student.items.length) % S.student.items.length); }
+  else if (e.key === "/") { e.preventDefault(); $("#search").focus(); $("#search").select(); }
   else if (e.key === "j") next(1);
   else if (e.key === "k") next(-1);
   else if (e.key === "r") runR();

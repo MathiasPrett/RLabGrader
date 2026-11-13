@@ -37,12 +37,15 @@ def read_excel(path=config.ROSTER_XLSX):
             for r in rows if r and r[1]]
 
 
-def groups(entries):
-    """{'M': ['Grupo 1', ...], 'J': [...]}"""
-    out = {}
-    for e in entries:
-        out.setdefault(e.day, set()).add(e.group)
-    return {d: sorted(g, key=lambda x: int(x.split()[-1])) for d, g in sorted(out.items())}
+ALL = "Todos"
+
+
+def groups(entries) -> list[str]:
+    """["Todos", "Grupo 1", ...]: un grupo de ayudante abarca ambos días."""
+    def key(g):
+        m = [int(x) for x in str(g).split() if x.isdigit()]
+        return (m[0] if m else 999, str(g))
+    return [ALL] + sorted({e.group for e in entries if e.group}, key=key)
 
 
 def _student_sections(student):
@@ -78,6 +81,6 @@ def match(entries, students):
     return entries
 
 
-def load_group(students, day, group, path=config.ROSTER_XLSX):
-    entries = [e for e in read_excel(path) if e.day == day and e.group == group]
+def load_group(students, group, path=config.ROSTER_XLSX):
+    entries = [e for e in read_excel(path) if group == ALL or e.group == group]
     return match(entries, students)

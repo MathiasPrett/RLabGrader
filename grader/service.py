@@ -140,8 +140,8 @@ class Service:
         return {u for u, g in store.graded_by_app(ev.id).items() if not g["dry_run"]}
 
     # ---------- vistas ----------
-    def roster_view(self, ev: Evaluation, day, group):
-        entries = roster.load_group(self.students(), day, group)
+    def roster_view(self, ev: Evaluation, group):
+        entries = roster.load_group(self.students(), group)
         self.ensure_subs(ev, [e.user_id for e in entries])
         sent = store.graded_by_app(ev.id)
         local = self._local_sent(ev)
@@ -149,7 +149,7 @@ class Service:
         for e in entries:
             sub = ev.subs.get(e.user_id) if e.user_id else None
             out.append({
-                "name": e.name, "user_id": e.user_id, "section": e.section, "match": e.match,
+                "name": e.name, "user_id": e.user_id, "section": e.section, "day": e.day, "group": e.group, "match": e.match,
                 "warnings": e.warnings, "status": self.status(sub, local) if e.user_id else "no_encontrado",
                 "score": sub.get("score") if sub else None,
                 "app": sent.get(e.user_id),
@@ -189,7 +189,6 @@ class Service:
             "files": [p.name for p in resources.data_files(rid)],
             "solution": resources.read_text(rid, resources.SOLUTION),
             "notes": resources.read_text(rid, resources.NOTES),
-            "dry_run": config.DRY_RUN,
             "ai": f"{config.AI_PROVIDER} · {config.GROQ_MODEL}",
         }
 
@@ -236,7 +235,7 @@ class Service:
         return self.advisor.suggest(case, use_cache).model_dump()
 
     # ---------- escritura ----------
-    def grade(self, ev, user_id, fractions: list[float], comment: str):
+    def grade(self, ev, user_id, fractions: list[float], comment: str, dry_run: bool = True):
         items = self.items_for(ev, user_id)
         if len(fractions) != len(items):
             raise ValueError("Cantidad de puntajes no coincide con las preguntas")
@@ -248,16 +247,16 @@ class Service:
             if not 0 <= f <= 1:
                 raise ValueError("El puntaje debe estar entre 0 y 1")
             scores.update(ev.atype.score_targets(item, f))
-        result = {"scores": self.client.set_question_scores(ev.quiz_id, qs["id"], qs["attempt"], scores)}
+        result = {"scores": self.client.set_question_scores(ev.quiz_id, qs["id"], qs["attempt"], scores, dry_run)}
         if comment.strip():
-            result["comment"] = self.client.add_comment(ev.id, user_id, comment.strip())
-        store.log_grade(ev.id, user_id, scores, comment, config.DRY_RUN, result)
+            result["comment"] = self.client.add_comment(ev.id, user_id, comment.strip(), dry_run)
+        store.log_grade(ev.id, user_id, scores, comment, dry_run, result)
         state = None
-        if not config.DRY_RUN:  # releer para confirmar lo que quedó en Canvas
+        if not dry_run:  # releer para confirmar lo que quedó en Canvas
             self.ensure_subs(ev, [user_id], refresh=True)
             state = (ev.subs.get(user_id) or {}).get("workflow_state")
             if state != "graded":
                 raise ValueError(f"Canvas guardó los puntajes pero la entrega quedó en estado '{state}' "
                                  "(no 'graded'). Revísala en SpeedGrader.")
-        return {"dry_run": config.DRY_RUN, "scores": scores, "state": state,
+        return {"dry_run": dry_run, "scores": scores, "state": state,
                 "new_score": (ev.subs.get(user_id) or {}).get("score")}

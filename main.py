@@ -32,7 +32,7 @@ def check_setup():
     if roster.is_relative_to(config.ROOT):
         roster = roster.relative_to(config.ROOT)
     print(f"  Planilla: {roster}")
-    print(f"  Modo: {'PRUEBA (no envía nada a Canvas)' if config.DRY_RUN else 'ENVÍO REAL a Canvas'}")
+    print("  Envío a Canvas: se controla con el interruptor de la app (parte encendido).")
 
 
 def main():

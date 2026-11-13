@@ -11,7 +11,10 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/r.min.js"></script>
-<link rel="stylesheet" href="/static/app.css?v=4">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="/static/app.css?v=5">
 </head>
 <body>
 <header>
@@ -22,7 +25,6 @@
 
   <div class="picker">
     <label class="pick"><span>Evaluación</span><select id="sel-eval"></select></label>
-    <label class="pick"><span>Día</span><select id="sel-day"></select></label>
     <label class="pick"><span>Grupo</span><select id="sel-group"></select></label>
     <button id="btn-load" class="ink">Cargar</button>
   </div>
@@ -35,15 +37,24 @@
   <div class="head-actions">
     <button id="btn-refresh" class="quiet" title="Volver a leer todo desde Canvas">Actualizar desde Canvas</button>
     <button id="btn-res" class="quiet">Recursos</button>
-    <span id="mode"></span>
+    <label class="switch" title="Encendido: al confirmar, la nota y el comentario se suben a Canvas. Apagado: modo prueba, solo se registra en tu computador.">
+      <input type="checkbox" id="live" checked>
+      <span class="track" aria-hidden="true"><i></i></span>
+      <span id="mode" class="live">Envío real a Canvas</span>
+    </label>
   </div>
 </header>
 
 <main>
-  <aside id="list">
-    <div class="empty">
-      <img src="/static/logo.svg" alt="" width="40" height="40">
-      <p>Elige evaluación, día y grupo arriba y presiona <b>Cargar</b>.</p>
+  <aside id="side">
+    <div class="search">
+      <input id="search" type="search" placeholder="Buscar alumno…  ( / )" autocomplete="off" spellcheck="false">
+    </div>
+    <div id="list">
+      <div class="empty">
+        <img src="/static/logo.svg" alt="" width="40" height="40">
+        <p>Elige evaluación y grupo arriba y presiona <b>Cargar</b>.</p>
+      </div>
     </div>
   </aside>
 
@@ -72,6 +83,7 @@
     <details class="card small keys"><summary>Atajos de teclado</summary>
       <dl>
         <dt><kbd>j</kbd> <kbd>k</kbd></dt><dd>Alumno siguiente / anterior</dd>
+        <dt><kbd>/</kbd></dt><dd>Buscar alumno (<kbd>Esc</kbd> limpia)</dd>
         <dt><kbd>Tab</kbd></dt><dd>Pregunta siguiente (talleres)</dd>
         <dt><kbd>0</kbd> <kbd>5</kbd> <kbd>7</kbd> <kbd>1</kbd></dt><dd>Poner puntaje y pasar a la próxima pregunta</dd>
         <dt><kbd>r</kbd></dt><dd>Ejecutar R</dd>
@@ -97,6 +109,6 @@
   <div class="row end"><button id="res-close" class="quiet">Cerrar</button><button id="res-save" class="primary">Guardar</button></div>
 </dialog>
 
-<script src="/static/app.js?v=4"></script>
+<script src="/static/app.js?v=5"></script>
 </body>
 </html>

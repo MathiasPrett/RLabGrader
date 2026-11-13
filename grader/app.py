@@ -47,10 +47,10 @@ def groups():
 
 
 @app.get("/api/eval/{aid}")
-def load_eval(aid: int, day: str, group: str, type: str | None = None, refresh: bool = False):
+def load_eval(aid: int, group: str, type: str | None = None, refresh: bool = False):
     s = svc()
     ev = s.load(aid, type, refresh)
-    return {"info": s.eval_info(ev), "students": s.roster_view(ev, day, group)}
+    return {"info": s.eval_info(ev), "students": s.roster_view(ev, group)}
 
 
 @app.get("/api/eval/{aid}/student/{uid}")
@@ -77,13 +77,14 @@ def suggest(aid: int, uid: int, body: RunReq):
 
 class GradeReq(BaseModel):
     fractions: list[float]
+    dry_run: bool = True  # el interruptor de la app; si no viene, NO se envía
     comment: str = ""
 
 
 @app.post("/api/eval/{aid}/student/{uid}/grade")
 def grade(aid: int, uid: int, body: GradeReq):
     s = svc()
-    return s.grade(s.load(aid), uid, body.fractions, body.comment)
+    return s.grade(s.load(aid), uid, body.fractions, body.comment, body.dry_run)
 
 
 class TextReq(BaseModel):

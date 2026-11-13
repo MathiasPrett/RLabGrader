@@ -80,7 +80,8 @@ header { position: sticky; top: 0; z-index: 3; height: var(--head-h);
 /* ---------- distribución ---------- */
 main { display: grid; grid-template-columns: 270px minmax(0, 1fr) 380px; height: calc(100vh - var(--head-h)); }
 aside, #center, #right { overflow: auto; }
-#list { border-right: 1px solid var(--rule); padding: 8px 8px 24px; background: var(--paper); }
+#side { border-right: 1px solid var(--rule); background: var(--paper); display: flex; flex-direction: column; overflow: hidden; }
+#list { padding: 8px 8px 24px; overflow: auto; flex: 1; min-height: 0; }
 #center { padding: 16px 20px 40px; }
 #right { padding: 16px 16px 40px 0; }
 
@@ -206,7 +207,7 @@ dialog textarea { font-family: var(--mono); font-size: 12.5px; }
 @media (max-width: 1180px) {
   header { height: auto; flex-wrap: wrap; padding: 10px 16px; gap: 10px 16px; }
   main { grid-template-columns: 1fr; height: auto; }
-  #list { border-right: 0; border-bottom: 1px solid var(--rule); max-height: 40vh; }
+  #side { border-right: 0; border-bottom: 1px solid var(--rule); max-height: 40vh; }
   #center { padding: 16px; }
   #right { padding: 0 16px 40px; }
   .head-actions { margin-left: 0; }
@@ -217,3 +218,23 @@ dialog textarea { font-family: var(--mono); font-size: 12.5px; }
   .picker button { flex: 1 1 100%; margin: 4px 0 0; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* buscador */
+#side .search { padding: 10px 10px 8px; border-bottom: 1px solid var(--rule); }
+#search { width: 100%; padding: 7px 10px; border: 1px solid var(--rule); border-radius: 8px; background: #fff; font: inherit; font-size: 13px; }
+#search:focus { outline: 2px solid var(--accent, #2563eb); outline-offset: -1px; }
+#list .nohit { padding: 16px 8px; }
+
+/* interruptor de envío real */
+.switch { display: inline-flex; align-items: center; gap: 8px; margin-left: 8px; cursor: pointer; user-select: none; }
+.switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.switch .track { width: 36px; height: 20px; border-radius: 999px; background: #d4d4d8; position: relative; transition: background .15s; flex: none; }
+.switch .track i { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s; }
+.switch input:checked + .track { background: var(--bad); }
+.switch input:checked + .track i { transform: translateX(16px); }
+.switch input:focus-visible + .track { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; }
+.switch #mode { margin-left: 0; }
+
+/* fórmulas */
+.katex { font-size: 1.05em; }
+pre .katex-display { margin: .4em 0; }

@@ -11,9 +11,9 @@ alumnos, su respuesta, su código R ejecutado y, si lo pides, una **primera opin
 
 ## Qué hace
 
-- **Tus alumnos, sin buscarlos**: eliges la evaluación, el día y tu grupo (desde la planilla de
-  coordinación de ayudantes) y aparecen separados en *pendientes*, *ya revisados*, *sin entrega* y
-  *no encontrados*.
+- **Tus alumnos, sin buscarlos**: eliges la evaluación y tu grupo (o **Todos**), desde la planilla de
+  coordinación de ayudantes, y aparecen separados en *pendientes*, *ya revisados*, *sin entrega* y
+  *no encontrados*. Un buscador arriba de la lista filtra por nombre (atajo `/`).
 - **Todo en una pantalla**: el contexto y la pregunta que le tocó a cada alumno (con versiones
   sorteadas), su respuesta (✔/✘ según Canvas), la respuesta correcta, las alternativas y su código R.
 - **▶ Ejecutar R**: corre el código del alumno en tu computador con la base de datos correcta
@@ -28,7 +28,9 @@ alumnos, su respuesta, su código R ejecutado y, si lo pides, una **primera opin
 - **✨ Sugerencia IA** (opcional, con botón): puntaje según la pauta, razón y comentario sugerido.
   **No se envía el nombre ni el ID del alumno** a la IA.
 - **Confirmar y subir**: escribe el puntaje y el comentario en Canvas, solo cuando tú lo confirmas.
-- **Modo prueba** (`DRY_RUN=1`, por defecto): no envía nada a Canvas.
+- **Interruptor "Envío real a Canvas"** arriba a la derecha: encendido (al abrir la app) sube las
+  notas al confirmar; apagado es **modo prueba** y no envía nada.
+- **Fórmulas**: los enunciados con ecuaciones de Canvas se muestran renderizadas (LaTeX).
 - Atajos de teclado: `j`/`k` alumno siguiente/anterior · `Tab` pregunta siguiente (talleres) ·
   `0` `5` `7` `1` puntaje · `r` ejecutar R · `i` pedir IA · `c` armar comentario · `Ctrl+Enter` confirmar.
 
@@ -122,7 +124,6 @@ En la carpeta de RLabGrader hay un archivo llamado `.env.example`. Haz una copia
 | `CANVAS_TOKEN` | El token del paso 4 |
 | `COURSE_ID` | El número del curso: en Canvas, entra al curso y míralo en la URL (`.../courses/123456`) |
 | `GROQ_API_KEY` | La clave del paso 5 (opcional) |
-| `DRY_RUN` | `1` = modo prueba, no envía nada. `0` = envío real a Canvas |
 
 > El archivo `.env` contiene tus claves: **no lo compartas** ni lo subas a internet.
 > El repositorio ya está configurado para que git lo ignore.
@@ -169,10 +170,11 @@ Opciones: `uv run main.py --no-browser` no abre el navegador; para usar otro pue
 
 ## Uso recomendado
 
-1. Deja `DRY_RUN=1` mientras te familiarizas: puedes hacer todo, pero nada llega a Canvas.
-   Arriba a la derecha verás **MODO PRUEBA** (amarillo) o **ENVÍO REAL** (rojo).
-2. Cuando quieras corregir de verdad, cambia a `DRY_RUN=0`, reinicia la app y **prueba con un solo
-   alumno**. Revisa en SpeedGrader (cada alumno tiene un enlace) que la nota y el comentario quedaron bien.
+1. La app abre con el interruptor **Envío real a Canvas** encendido (rojo): al confirmar, la nota se
+   sube. Para practicar sin enviar nada, apágalo (amarillo, **Modo prueba**). Cada vez que abres la
+   app vuelve a quedar encendido, y la confirmación siempre te dice cuál de los dos va a pasar.
+2. La primera vez, **prueba con un solo alumno** y revisa en SpeedGrader (cada alumno tiene un
+   enlace) que la nota y el comentario quedaron bien.
 3. En **Recursos** puedes subir otras bases de datos, pegar una solución de referencia y escribir
    notas con tus criterios para que la IA las considere.
 
