@@ -1,10 +1,11 @@
 """Lógica de la app: carga una evaluación, arma la vista por alumno, ejecuta R/IA y envía notas."""
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from . import config, overrides, r_runner, resources, roster, store
 from .ai import AIAdvisor, CaseInput, ItemCase
 from .assessments import AssessmentType, Item, Question, detect_type, get_type
+from .assessments.segment import segment
 from .canvas_client import CanvasClient
 
 
@@ -120,6 +121,22 @@ class Service:
         items = self.items_for(ev, user_id)
         return items[0].code_text if items else ""
 
+    def edited_items(self, ev, user_id, code: str | None) -> list[Item]:
+        """Ítems del alumno usando el código editado por el ayudante (solo local).
+        En talleres se vuelven a ubicar los fragmentos por pregunta sobre el código editado."""
+        items = self.items_for(ev, user_id)
+        if code is None or not items:
+            return items
+        if len(code) > 200_000:
+            raise ValueError("El código editado es demasiado largo")
+        out = [replace(it, code_text=code, fragment_lines=[], fragment_source="todo") for it in items]
+        if ev.atype.segment_code:
+            found = segment(code, len(out))
+            for it in out:
+                it.fragment_lines, it.fragment_source = (found[it.n], "comentarios") if it.n in found \
+                    else ([], "no detectado")
+        return out
+
     @staticmethod
     def status(sub, local_sent=None):
         """Según Canvas: 'graded' = corregida (todas las preguntas con puntaje).
@@ -193,21 +210,29 @@ class Service:
         }
 
     # ---------- R ----------
-    def run_r(self, ev, user_id, use_cache=True):
-        """Ejecuta el código completo del alumno con la BD de su contexto."""
-        return r_runner.run(self.code_of(ev, user_id), self.data_files(ev, user_id), use_cache).to_dict()
+    def run_r(self, ev, user_id, use_cache=True, code: str | None = None):
+        """Ejecuta el código completo del alumno con la BD de su contexto.
+        code: versión editada por el ayudante (solo se ejecuta; no se guarda ni se envía)."""
+        items = self.edited_items(ev, user_id, code)
+        src = items[0].code_text if items else ""
+        res = r_runner.run(src, self.data_files(ev, user_id), use_cache).to_dict()
+        res["edited"] = code is not None
+        if code is not None:  # fragmentos por pregunta del código editado (talleres)
+            res["fragments"] = {it.n: {"lines": it.fragment_lines, "source": it.fragment_source} for it in items}
+        return res
 
     def run_solution(self, ev, use_cache=True):
         sol = resources.read_text(ev.id, resources.SOLUTION)
         return r_runner.run(sol, resources.data_files(ev.id), use_cache).to_dict() if sol.strip() else None
 
     # ---------- IA ----------
-    def suggest(self, ev, user_id, use_cache=True):
-        items = self.items_for(ev, user_id)
+    def suggest(self, ev, user_id, use_cache=True, code: str | None = None):
+        """code: si el ayudante editó el código, la IA evalúa esa versión."""
+        items = self.edited_items(ev, user_id, code)
         if not items:
             raise ValueError("El alumno no tiene preguntas respondidas")
-        code = self.code_of(ev, user_id)
-        r = self.run_r(ev, user_id) if code.strip() else None
+        code = items[0].code_text
+        r = self.run_r(ev, user_id, code=code if code != self.code_of(ev, user_id) else None) if code.strip() else None
         sol = self.run_solution(ev)
         ejec = None
         if r:

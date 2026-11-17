@@ -10,22 +10,19 @@ import webbrowser
 
 import uvicorn
 
-from grader import config
+from grader import config, settings
 
 
 def check_setup():
     """Avisa en la terminal de lo que falta configurar, sin impedir que la app arranque."""
     problems = []
-    if not (config.ROOT / ".env").exists():
-        problems.append("Falta el archivo .env: copia .env.example como .env y complétalo.")
-    if not config.CANVAS_TOKEN or config.CANVAS_TOKEN.startswith("pega_aqui"):
-        problems.append("Falta CANVAS_TOKEN en .env.")
-    if not config.COURSE_ID or config.COURSE_ID == 123456:
-        problems.append("Falta COURSE_ID en .env.")
+    st = settings.status()
+    if not st["ready"]:
+        problems.append("Faltan el token de Canvas y/o el número del curso: complétalos en la app (botón ⚙).")
     if not config.ROSTER_XLSX.exists():
         problems.append(f"Falta la planilla de ayudantes: copia el .xlsx en {config.ROSTER_DIR}")
-    if not config.GROQ_API_KEY or config.GROQ_API_KEY.startswith("pega_aqui"):
-        problems.append("(Opcional) Sin GROQ_API_KEY: el botón de IA no funcionará.")
+    if not st["GROQ_API_KEY"]["set"]:
+        problems.append("(Opcional) Sin API key de Groq: la sugerencia IA no funcionará (se configura en ⚙).")
     for p in problems:
         print(f"  ⚠  {p}")
     roster = config.ROSTER_XLSX

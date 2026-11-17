@@ -5,15 +5,35 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent
-load_dotenv(ROOT / ".env")
+ENV_FILE = ROOT / ".env"
+DEFAULT_CANVAS_URL = "https://cursos.canvas.uc.cl"
+load_dotenv(ENV_FILE)
 
-CANVAS_URL = os.environ.get("CANVAS_URL", "https://cursos.canvas.uc.cl").rstrip("/")
-CANVAS_TOKEN = os.environ.get("CANVAS_TOKEN", "")
-COURSE_ID = int(os.environ.get("COURSE_ID") or 0)  # obligatorio en .env
 
-AI_PROVIDER = os.environ.get("AI_PROVIDER", "groq")
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
+def _int(v):
+    try:
+        return int(v or 0)
+    except ValueError:
+        return 0
+
+
+def _load_keys():
+    """Claves que se pueden cambiar desde la app (⚙). reload() las vuelve a leer del .env."""
+    global CANVAS_URL, CANVAS_TOKEN, COURSE_ID, AI_PROVIDER, GROQ_API_KEY, GROQ_MODEL
+    CANVAS_URL = (os.environ.get("CANVAS_URL") or DEFAULT_CANVAS_URL).rstrip("/")
+    CANVAS_TOKEN = os.environ.get("CANVAS_TOKEN", "")
+    COURSE_ID = _int(os.environ.get("COURSE_ID"))
+    AI_PROVIDER = os.environ.get("AI_PROVIDER") or "groq"
+    GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+    GROQ_MODEL = os.environ.get("GROQ_MODEL") or "openai/gpt-oss-120b"
+
+
+def reload():
+    load_dotenv(ENV_FILE, override=True)
+    _load_keys()
+
+
+_load_keys()
 
 PORT = int(os.environ.get("PORT") or 8765)
 

@@ -25,6 +25,9 @@ alumnos, su respuesta, su código R ejecutado y, si lo pides, una **primera opin
 - **Talleres**: separa el código de cada pregunta usando los títulos que puso el alumno
   (`#1`, `Pregunta 2:`, `#P3`…); si no hay, la IA propone dónde está. Cada pregunta tiene su puntaje
   (p. ej. 1 o 1.5) y la pauta se aplica como fracción de ese puntaje.
+- **Editar el código del alumno (solo local)**: con el lápiz ✏ en la esquina del recuadro del código
+  puedes corregir un detalle y volver a ejecutarlo; aparece "⚠ No es el original" y un botón
+  **Restablecer**. Mientras esté editado, R y la sugerencia IA usan tu versión. Nada de eso se sube a Canvas.
 - **✨ Sugerencia IA** (opcional, con botón): puntaje según la pauta, razón y comentario sugerido.
   **No se envía el nombre ni el ID del alumno** a la IA.
 - **Confirmar y subir**: escribe el puntaje y el comentario en Canvas, solo cuando tú lo confirmas.
@@ -44,9 +47,10 @@ ayudantes** (el Excel con los alumnos y grupos).
 
 **Resumen rápido** (si ya tienes todo):
 
-1. Copia `.env.example` como `.env` y completa `CANVAS_TOKEN` y `COURSE_ID`.
-2. Copia el Excel de coordinación de ayudantes en la carpeta **`planilla/`**.
-3. Ejecuta `uv run main.py`. Se abre el navegador en <http://localhost:8765>.
+1. Copia el Excel de coordinación de ayudantes en la carpeta **`planilla/`**.
+2. Ejecuta `uv run main.py`. Se abre el navegador en <http://localhost:8765>.
+3. La primera vez se abre **⚙ Configuración**: pega tu token de Canvas, el número del curso y
+   (opcional) tu API key de Groq, y presiona **Guardar**.
 
 ### 1. Instalar uv
 
@@ -112,9 +116,14 @@ Si lo pierdes o crees que alguien lo vio, vuelve a esa página y elimínalo; lue
 Sin esta clave la app funciona igual; solo el botón de IA mostrará un aviso.
 La cuenta gratuita de Groq tiene límites de uso: si se alcanzan, la IA puede tardar o fallar un rato.
 
-### 6. Configurar el archivo `.env`
+### 6. Configurar tus claves
 
-En la carpeta de RLabGrader hay un archivo llamado `.env.example`. Haz una copia con el nombre
+**Lo más fácil: desde la app.** Ábrela (paso 8) y presiona el engranaje **⚙** arriba a la derecha
+(la primera vez se abre solo). Pega el token de Canvas, el número del curso y, si quieres, la API
+key de Groq; cada campo tiene un "¿Cómo obtengo esto?". **Probar** comprueba que funcionan y
+**Guardar** las escribe en el archivo `.env` por ti. Las claves guardadas nunca se vuelven a mostrar.
+
+**O a mano, editando `.env`:** en la carpeta de RLabGrader hay un archivo llamado `.env.example`. Haz una copia con el nombre
 **`.env`** (exactamente así, con el punto al inicio) y ábrela con cualquier editor de texto
 (Bloc de notas, TextEdit, VS Code…). Completa:
 
@@ -158,8 +167,7 @@ uv run main.py
 ```
 La primera vez tarda un poco porque uv descarga Python y las dependencias. Luego se abre solo el
 navegador en **<http://localhost:8765>** (si no, abre esa dirección a mano). En la terminal verás
-avisos si falta algo por configurar (el `.env`, el token, la planilla…) y si estás en modo prueba
-o envío real.
+avisos si falta algo por configurar (el token, la planilla…).
 
 Para cerrarla, vuelve a la terminal y presiona `Ctrl + C`. Para usarla otro día, repite solo este paso.
 
@@ -206,7 +214,11 @@ Si borras el archivo, la evaluación vuelve a funcionar como siempre.
 
 ## Privacidad y seguridad
 
-- Las claves viven solo en tu `.env`, en tu computador.
+- Las claves viven solo en tu `.env`, en tu computador (con permisos solo para tu usuario cuando se
+  guardan desde ⚙). La app nunca las muestra de vuelta en el navegador.
+- La app solo acepta conexiones desde tu propio computador (`localhost`) y rechaza cualquier acción
+  que no venga de su propia página: otra web abierta en tu navegador no puede usarla para enviar
+  notas ni cambiar tus claves.
 - A la IA se envía el enunciado, la respuesta, el código, la salida de R y una muestra de la base
   de datos. **Nunca** el nombre ni el ID del alumno. Aun así, revisa que el uso de servicios de IA
   externos esté permitido por tu institución y curso.

@@ -11,7 +11,8 @@ def _groq():
 PROVIDERS = {"groq": _groq}
 
 
-def make_provider(name: str = config.AI_PROVIDER) -> AIProvider:
+def make_provider(name: str | None = None) -> AIProvider:
+    name = name or config.AI_PROVIDER
     try:
         return PROVIDERS[name]()
     except KeyError:

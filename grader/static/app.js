@@ -1,7 +1,7 @@
 // RLabGrader — interfaz. La IA solo sugiere; nada se envía sin "Confirmar".
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const S = { evals: [], info: null, students: [], cur: -1, student: null, item: 0, fr: [], ai: null, rr: null, q: "" };
+const S = { evals: [], info: null, students: [], cur: -1, student: null, item: 0, fr: [], ai: null, rr: null, q: "", edit: null, editing: false };
 
 async function api(path, opts = {}) {
   const r = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
@@ -37,10 +37,107 @@ function renderMath(root) {
       throwOnError: false,
     }));
 }
+// ---------- código editado (solo local: no se envía a Canvas; la IA y R usan esta versión) ----------
+const editKey = () => `edit:${S.info?.id}:${S.students[S.cur]?.user_id}`;
+const isEdited = () => S.edit != null && S.student && S.edit !== S.student.code;
+const curCode = () => (isEdited() ? S.edit : S.student?.code ?? "");
+const editBody = () => (isEdited() ? { code: S.edit } : {});
+function saveEdit() { if (isEdited()) LS.set(editKey(), S.edit); else { try { localStorage.removeItem(editKey()); } catch {} } }
+const PENCIL = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11.3 1.7a1.5 1.5 0 0 1 2.1 0l.9.9a1.5 1.5 0 0 1 0 2.1L5.5 13.5 2 14l.5-3.5z"/></svg>';
+function codeBar() {
+  const ed = isEdited();
+  return `<div class="codebar">
+    <span class="notorig" ${ed ? "" : "hidden"}>⚠ No es el original</span>
+    <button class="cb-btn" data-act="restore" title="Volver al código original del alumno" ${ed ? "" : "hidden"}>↺ Restablecer</button>
+    ${S.editing ? '<button class="cb-btn on" data-act="done" title="Terminar de editar">✓ Listo</button>'
+      : `<button class="cb-btn icon" data-act="edit" title="Editar el código (solo en tu computador). Atajo: e">${PENCIL}</button>`}
+  </div>`;
+}
+// Recuadro del código del alumno, editable en el mismo lugar
+function codeBox(numbered = false, emptyHtml = '<p class="bad nocode">(no entregó código)</p>') {
+  const code = curCode();
+  const body = S.editing
+    ? `<textarea id="code-edit" spellcheck="false" rows="${Math.min(30, Math.max(6, code.split("\n").length + 1))}">${esc(code)}</textarea>`
+    : code.trim() ? codeBlock(code, null, numbered) : `<div class="nocode">${emptyHtml}</div>`;
+  return `<div class="codebox ${S.editing ? "editing" : ""} ${isEdited() ? "edited" : ""}">${codeBar()}${body}</div>`;
+}
+function refreshBars() {  // al escribir: actualizar avisos sin redibujar (no perder el cursor)
+  const ed = isEdited();
+  document.querySelectorAll(".codebox").forEach((b) => b.classList.toggle("edited", ed));
+  document.querySelectorAll(".codebar .notorig, .codebar [data-act=restore]").forEach((el) => (el.hidden = !ed));
+}
+function wireEditor() {
+  const ta = $("#code-edit");
+  if (ta) {
+    ta.oninput = () => { S.edit = ta.value; S.frags = null; saveEdit(); refreshBars(); };
+    ta.onkeydown = (e) => {
+      if (e.key === "Tab") { e.preventDefault(); ta.setRangeText("  ", ta.selectionStart, ta.selectionEnd, "end"); ta.oninput(); }
+      if (e.key === "Enter" && e.ctrlKey) { e.preventDefault(); e.stopPropagation(); runR(); }
+      if (e.key === "Escape") { e.preventDefault(); stopEditing(); }
+    };
+  }
+  document.querySelectorAll("#student [data-act]").forEach((b) => (b.onclick = (e) => {
+    e.stopPropagation(); e.preventDefault();
+    const a = b.dataset.act;
+    if (a === "edit") openEditor();
+    else if (a === "done") stopEditing();
+    else if (a === "restore") restoreCode();
+  }));
+}
+function openEditor() {
+  if (!S.student?.items.length) return;
+  S.editing = true;
+  renderStudent();
+  const ta = $("#code-edit"); ta?.focus(); ta?.setSelectionRange(0, 0); ta?.scrollIntoView({ block: "nearest" });
+}
+function stopEditing() { S.editing = false; renderStudent(); }
+function restoreCode() {
+  if (isEdited() && !confirm("¿Descartar tus cambios y volver al código original del alumno?")) return;
+  S.edit = null; S.frags = null; S.rr = null; saveEdit();
+  renderStudent();
+}
 const isTaller = () => S.student?.items.length > 1 || S.info?.type === "taller";
 
 // ---------- inicio ----------
+// ---------- configuración (⚙): claves en .env ----------
+const KEYS = ["CANVAS_TOKEN", "COURSE_ID", "GROQ_API_KEY", "CANVAS_URL"];
+async function openSettings(firstTime = false) {
+  const st = await api("/api/settings");
+  for (const k of KEYS) $("#set-" + k).value = "";
+  for (const k of ["CANVAS_TOKEN", "GROQ_API_KEY"]) $("#set-" + k).type = "password";
+  for (const k of ["CANVAS_TOKEN", "GROQ_API_KEY"]) {
+    $("#set-" + k).placeholder = st[k].set ? `Configurado ✓ (termina en …${st[k].hint}) — escribe otro para cambiarlo` : "Pega aquí la clave";
+  }
+  $("#set-COURSE_ID").placeholder = st.COURSE_ID.set ? `${st.COURSE_ID.hint} (escribe otro para cambiarlo)` : "ej. 106099";
+  $("#set-CANVAS_URL").placeholder = st.CANVAS_URL.hint;
+  for (const k of ["CANVAS_TOKEN", "COURSE_ID", "GROQ_API_KEY"]) {
+    $("#st-" + k).innerHTML = st[k].set ? '<span class="ok">✓ configurado</span>' : (k === "GROQ_API_KEY" ? '<span class="muted">sin configurar</span>' : '<span class="bad">falta</span>');
+  }
+  $("#set-msg").innerHTML = firstTime ? '<div class="note warn">Para empezar, completa el <b>token de Canvas</b> y el <b>número del curso</b>.</div>' : "";
+  if (!$("#dlg-settings").open) $("#dlg-settings").showModal();
+}
+const settingsValues = () => Object.fromEntries(KEYS.map((k) => [k, $("#set-" + k).value.trim() || null]));
+function showTest(r) {
+  const line = (x) => x ? `<div class="${x.ok ? "ok" : "bad"}">${x.ok ? "✓" : "✗"} ${esc(x.msg)}</div>` : "";
+  $("#set-msg").innerHTML = line(r.canvas) + line(r.groq);
+}
+async function saveSettings() {
+  const vals = settingsValues();
+  if (!Object.values(vals).some(Boolean)) { $("#set-msg").innerHTML = '<span class="muted">No escribiste nada nuevo.</span>'; return; }
+  showTest(await post("/api/settings/test", vals));
+  if ([...$("#set-msg").querySelectorAll(".bad")].length && !confirm("Alguna prueba falló. ¿Guardar de todas formas?")) return;
+  const st = await post("/api/settings", vals);
+  await openSettings();
+  $("#set-msg").insertAdjacentHTML("afterbegin", '<div class="ok"><b>✓ Guardado.</b></div>');
+  if (st.ready && !S.evals.length) await init();
+}
+
 async function init() {
+  const cfg = await api("/api/settings");
+  if (!cfg.ready) {
+    $("#list").innerHTML = '<div class="empty"><p>Falta configurar tus claves. Presiona <b>⚙</b> arriba a la derecha.</p></div>';
+    return openSettings(true);
+  }
   const [evals, groups] = await Promise.all([api("/api/assessments"), api("/api/groups")]);
   S.evals = evals;
   const opt = (t, label) => {
@@ -94,7 +191,7 @@ function renderList() {
 async function select(i) {
   const s = S.students[i];
   if (!s) return;
-  S.cur = i; S.item = 0; S.ai = null; S.rr = null; renderList();
+  S.cur = i; S.item = 0; S.ai = null; S.rr = null; S.edit = null; S.editing = false; S.frags = null; S.aiCode = null; renderList();
   $("#list .st.sel")?.scrollIntoView({ block: "nearest" });
   $("#grade-msg").textContent = ""; $("#comment").value = ""; $("#custom").value = "";
   if (!s.user_id || s.status === "sin_entrega") {
@@ -108,6 +205,8 @@ async function select(i) {
   if (S.students[S.cur] !== s) return;
   S.student = st;
   S.fr = st.items.map(() => null);
+  const saved = LS.get(editKey());
+  if (saved != null && saved !== st.code) { S.edit = saved; }
   renderStudent(); renderGrade(); renderAI();
   $("#center").scrollTop = 0;
 }
@@ -127,8 +226,10 @@ function codeBlock(code, ranges = null, numbered = false) {
 }
 
 function fragmentOf(it) {
-  const ai = S.ai?.items?.find((x) => x.n === it.n);
-  if (it.fragment_source === "comentarios") return { lines: it.fragment_lines, src: "según los títulos del alumno" };
+  // las líneas de la IA solo sirven si la IA vio este mismo código
+  const ai = S.aiCode === curCode() ? S.ai?.items?.find((x) => x.n === it.n) : null;
+  const own = isEdited() ? S.frags?.[it.n] : { lines: it.fragment_lines, source: it.fragment_source };
+  if (own?.source === "comentarios") return { lines: own.lines, src: "según los títulos del alumno" };
   if (ai?.lineas?.length) return { lines: ai.lineas, src: "ubicado por la IA (verifica)" };
   return null;
 }
@@ -153,8 +254,9 @@ function renderStudent() {
     let codeHtml = "";
     const noCode = S.info.pauta_extra ? '<p class="muted">(no entregó código — ver excepción de esta evaluación)</p>' : '<p class="bad">(no entregó código)</p>';
     const srcTag = st.code_source === "buzón" ? '<div class="small buzon">📥 Código recibido en el buzón aparte (solo local, no está en Canvas)</div>' : "";
-    if (!taller) codeHtml = st.code.trim() ? srcTag + codeBlock(st.code) : noCode;
-    else if (frag) codeHtml = `<div class="small muted">Código de esta pregunta — ${frag.src}</div>${codeBlock(st.code, frag.lines)}`;
+    if (!taller) codeHtml = srcTag + codeBox(false, noCode);
+    else if (frag) codeHtml = `<div class="small muted">Código de esta pregunta — ${frag.src}${isEdited() ? " · versión editada" : ""}</div>${codeBlock(curCode(), frag.lines)}`;
+    else if (isEdited()) codeHtml = `<div class="small warn">Código editado: ejecuta R o pide la IA para ubicar esta pregunta, o revisa el código completo.</div>`;
     else codeHtml = `<div class="small warn">No se identificó el código de esta pregunta (pide la sugerencia IA o revisa el código completo).</div>`;
     return `<div class="card item ${taller && k === S.item ? "active" : ""}" data-k="${k}">
       <div class="row qhead"><span class="qlabel">${taller ? `${esc(it.label)}<small>${fmt(it.points)} pts</small>` : "Pregunta"}</span>
@@ -166,10 +268,11 @@ function renderStudent() {
     </div>`;
   }).join("");
 
-  const full = taller ? `<details class="card" ${st.items.some((it) => !fragmentOf(it)) ? "open" : ""}>
+  const full = taller ? `<details class="card fullcode" ${S.editing || isEdited() || st.items.some((it) => !fragmentOf(it)) ? "open" : ""}>
       <summary><b>Código completo</b> <span class="small muted">(${st.code.split("\n").length} líneas)</span></summary>
-      ${st.code.trim() ? codeBlock(st.code, null, true) : '<p class="bad">(no entregó código)</p>'}</details>` : "";
+      ${codeBox(true)}</details>` : "";
   $("#student").innerHTML = head + (items || '<div class="card muted">Sin preguntas respondidas.</div>') + full + renderRun();
+  wireEditor();
   renderMath($("#student"));
   if (taller) $("#student").querySelectorAll(".item").forEach((el) => (el.onclick = (e) => {
     if (e.target.closest("summary,a")) return;
@@ -185,7 +288,7 @@ function renderRun() {
   const st = r.timed_out ? '<span class="bad">tiempo excedido</span>' : r.ok ? '<span class="ok">sin errores</span>' : `<span class="bad">${nErr || ""} error(es)</span>`;
   const ch = r.changes.length ? `<details class="small"><summary>${r.changes.length} ajuste(s) automático(s)</summary><ul>${r.changes.map((c) => `<li>${esc(c)}</li>`).join("")}</ul></details>` : "";
   const plots = (r.plots || []).map((p, k) => `<a href="${p}" target="_blank"><img src="${p}" alt="Gráfico ${k + 1}"></a>`).join("");
-  return `<div class="card"><b>Ejecución en R</b> · ${st}${ch}
+  return `<div class="card ${r.edited ? "run-edited" : ""}"><b>Ejecución en R</b>${r.edited ? ' <span class="chip warn">código editado</span>' : ""} · ${st}${ch}
     <pre class="out">${esc(r.stdout)}${r.timed_out ? `<span class="err">\n${esc(r.stderr)}</span>` : ""}</pre>
     ${plots ? `<div class="plots">${plots}</div>` : ""}</div>`;
 }
@@ -275,8 +378,9 @@ async function runR() {
   if (!S.student?.items.length) return;
   const who = uid();
   await busy($("#btn-run"), async () => {
-    try { S.rr = await post(`/api/eval/${S.info.id}/student/${who}/run_r`); } catch (e) { S.rr = { error: e.message }; }
-    if (uid() === who) renderStudent();
+    try { S.rr = await post(`/api/eval/${S.info.id}/student/${who}/run_r`, editBody()); } catch (e) { S.rr = { error: e.message }; }
+    if (S.rr?.fragments) S.frags = S.rr.fragments;
+    if (uid() === who) { renderStudent(); document.querySelector("#student .card:last-child")?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
   });
 }
 async function askAI() {
@@ -285,10 +389,12 @@ async function askAI() {
   $("#ai").innerHTML = '<span class="muted small">Pensando… (ejecuta R y consulta la IA)</span>';
   await busy($("#btn-ai"), async () => {
     let a;
-    try { a = await post(`/api/eval/${S.info.id}/student/${who}/suggest`); } catch (e) { a = { error: e.message }; }
+    const code = curCode(), body = editBody();
+    try { a = await post(`/api/eval/${S.info.id}/student/${who}/suggest`, body); } catch (e) { a = { error: e.message }; }
     if (uid() !== who) return;
-    S.ai = a;
-    if (!S.rr) S.rr = await post(`/api/eval/${S.info.id}/student/${who}/run_r`).catch(() => null);
+    S.ai = a; S.aiCode = code;
+    if (!S.rr || !!S.rr.edited !== isEdited()) S.rr = await post(`/api/eval/${S.info.id}/student/${who}/run_r`, body).catch(() => null);
+    if (S.rr?.fragments) S.frags = S.rr.fragments;
     renderStudent(); renderGrade(); renderAI();
   });
 }
@@ -372,7 +478,7 @@ document.addEventListener("keydown", (e) => {
   const typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
   if (e.key === "Escape" && document.activeElement === $("#search")) { $("#search").value = ""; $("#search").dispatchEvent(new Event("input")); $("#search").blur(); return; }
   if (e.ctrlKey && e.key === "Enter") { e.preventDefault(); grade(); return; }
-  if (typing || $("#dlg-res").open || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (typing || $("#dlg-res").open || $("#dlg-settings").open || e.ctrlKey || e.metaKey || e.altKey) return;
   const map = { "0": 0, "5": 0.5, "7": 0.7, "1": 1 };
   if (e.key in map) setScore(map[e.key]);
   else if (e.key === "Tab" && S.student?.items.length > 1) { e.preventDefault(); setItem((S.item + (e.shiftKey ? -1 : 1) + S.student.items.length) % S.student.items.length); }
@@ -380,8 +486,17 @@ document.addEventListener("keydown", (e) => {
   else if (e.key === "j") next(1);
   else if (e.key === "k") next(-1);
   else if (e.key === "r") runR();
+  else if (e.key === "e") { e.preventDefault(); openEditor(); }
   else if (e.key === "i") askAI();
   else if (e.key === "c") buildComment();
 });
+
+$("#btn-settings").onclick = () => openSettings().catch((e) => alert(e.message));
+$("#set-close").onclick = () => $("#dlg-settings").close();
+$("#set-test").onclick = () => busy($("#set-test"), async () => showTest(await post("/api/settings/test", settingsValues())));
+$("#set-save").onclick = () => busy($("#set-save"), saveSettings);
+document.querySelectorAll("[data-eye]").forEach((b) => (b.onclick = () => {
+  const el = $("#" + b.dataset.eye); el.type = el.type === "password" ? "text" : "password";
+}));
 
 init().catch((e) => ($("#list").innerHTML = `<p class="bad">${esc(e.message)}</p>`));

@@ -9,8 +9,8 @@ class GroqProvider(AIProvider):
 
     def __init__(self, api_key: str, model: str):
         super().__init__(model)
-        if not api_key:
-            raise AIProviderError("Falta GROQ_API_KEY en .env")
+        if not api_key or api_key.startswith("pega_aqui"):
+            raise AIProviderError("Falta la API key de Groq: configúrala en ⚙ Configuración (arriba a la derecha)")
         self.client = Groq(api_key=api_key)
 
     def complete_json(self, system, user):

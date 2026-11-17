@@ -13,11 +13,14 @@ class CanvasError(RuntimeError):
 
 
 class CanvasClient:
-    def __init__(self, base=config.CANVAS_URL, token=config.CANVAS_TOKEN, course_id=config.COURSE_ID):
-        if not token:
-            raise CanvasError("Falta CANVAS_TOKEN en .env (ver README)")
-        if not course_id:
-            raise CanvasError("Falta COURSE_ID en .env (ver README)")
+    def __init__(self, base=None, token=None, course_id=None):
+        # se leen al crear el cliente (no al importar), para que la configuración de ⚙ aplique al tiro
+        base, token = base or config.CANVAS_URL, token or config.CANVAS_TOKEN
+        course_id = course_id or config.COURSE_ID
+        if not token or token.startswith("pega_aqui"):
+            raise CanvasError("Falta el token de Canvas: configúralo en ⚙ Configuración (arriba a la derecha)")
+        if not course_id or course_id == 123456:
+            raise CanvasError("Falta el número del curso: configúralo en ⚙ Configuración (arriba a la derecha)")
         self.base = base
         self.course_id = course_id
         self.s = requests.Session()

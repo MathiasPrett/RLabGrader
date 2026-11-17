@@ -1,12 +1,13 @@
 """Servidor web local. Se inicia con: uv run main.py"""
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import resources
+from . import resources, settings
 from .ai.providers.base import AIProviderError
 from .canvas_client import CanvasError
 from .service import Service
@@ -24,6 +25,29 @@ def svc() -> Service:
     return _svc
 
 
+ALLOWED_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+
+def _own_origin(origin: str, port) -> bool:
+    u = urlsplit(origin)
+    return u.scheme == "http" and u.hostname in ALLOWED_HOSTS and u.port == port
+
+
+@app.middleware("http")
+async def same_origin_only(request: Request, call_next):
+    """La app solo responde a sí misma.
+    - El host debe ser localhost/127.0.0.1: evita que una web externa la alcance (DNS rebinding).
+    - Toda acción que modifica algo (guardar claves, enviar notas, ejecutar R...) debe venir de una
+      página de la propia app (cabecera Origin): otra web abierta en el navegador no puede usarla."""
+    if request.url.hostname not in ALLOWED_HOSTS:
+        return JSONResponse({"error": "Acceso no permitido"}, status_code=403)
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        origin = request.headers.get("origin")
+        if origin is not None and not _own_origin(origin, request.url.port):
+            return JSONResponse({"error": "Petición rechazada: no viene de RLabGrader"}, status_code=403)
+    return await call_next(request)
+
+
 @app.exception_handler(CanvasError)
 @app.exception_handler(AIProviderError)
 @app.exception_handler(ValueError)
@@ -34,6 +58,32 @@ async def _err(_: Request, exc: Exception):
 @app.get("/")
 def index():
     return FileResponse(HERE / "templates" / "index.html")
+
+
+# ---------- configuración (⚙) ----------
+class SettingsReq(BaseModel):
+    CANVAS_TOKEN: str | None = None
+    GROQ_API_KEY: str | None = None
+    COURSE_ID: str | None = None
+    CANVAS_URL: str | None = None
+
+
+@app.get("/api/settings")
+def get_settings():
+    return settings.status()  # nunca incluye las claves, solo si están y sus últimos 4 caracteres
+
+
+@app.post("/api/settings/test")
+def test_settings(body: SettingsReq):
+    return settings.test(body.model_dump())
+
+
+@app.post("/api/settings")
+def save_settings(body: SettingsReq):
+    global _svc
+    st = settings.save(body.model_dump())
+    _svc = None  # el servicio se vuelve a crear con las claves nuevas (sin reiniciar la app)
+    return st
 
 
 @app.get("/api/assessments")
@@ -61,18 +111,19 @@ def student(aid: int, uid: int):
 
 class RunReq(BaseModel):
     fresh: bool = False
+    code: str | None = None  # código editado localmente por el ayudante (solo para ejecutar)
 
 
 @app.post("/api/eval/{aid}/student/{uid}/run_r")
 def run_r(aid: int, uid: int, body: RunReq):
     s = svc()
-    return s.run_r(s.load(aid), uid, not body.fresh)
+    return s.run_r(s.load(aid), uid, not body.fresh, body.code)
 
 
 @app.post("/api/eval/{aid}/student/{uid}/suggest")
 def suggest(aid: int, uid: int, body: RunReq):
     s = svc()
-    return s.suggest(s.load(aid), uid, not body.fresh)
+    return s.suggest(s.load(aid), uid, not body.fresh, body.code)
 
 
 class GradeReq(BaseModel):
