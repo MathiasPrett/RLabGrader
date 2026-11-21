@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
-<link rel="stylesheet" href="/static/app.css?v=8">
+<link rel="stylesheet" href="/static/app.css?v=9">
 </head>
 <body>
 <header>
@@ -38,7 +38,7 @@
     <button id="btn-refresh" class="quiet" title="Volver a leer todo desde Canvas">Actualizar desde Canvas</button>
     <button id="btn-res" class="quiet">Recursos</button>
     <button id="btn-settings" class="quiet gear" title="Configuración: claves de Canvas y Groq" aria-label="Configuración">
-      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M11.1 1.5l.4 2.2c.6.2 1.1.5 1.6.9l2.1-.8 1.1 1.9-1.7 1.4c.1.6.1 1.2 0 1.8l1.7 1.4-1.1 1.9-2.1-.8c-.5.4-1 .7-1.6.9l-.4 2.2H8.9l-.4-2.2c-.6-.2-1.1-.5-1.6-.9l-2.1.8-1.1-1.9 1.7-1.4a5 5 0 0 1 0-1.8L3.7 5.7l1.1-1.9 2.1.8c.5-.4 1-.7 1.6-.9l.4-2.2h2.2zM10 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" transform="translate(0 1.5)"/></svg>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.93 9.39L21.71 9.62L21.71 14.38L18.93 14.61L18.74 15.05L20.55 17.19L17.19 20.55L15.05 18.74L14.61 18.93L14.38 21.71L9.62 21.71L9.39 18.93L8.95 18.74L6.81 20.55L3.45 17.19L5.26 15.05L5.07 14.61L2.29 14.38L2.29 9.62L5.07 9.39L5.26 8.95L3.45 6.81L6.81 3.45L8.95 5.26L9.39 5.07L9.62 2.29L14.38 2.29L14.61 5.07L15.05 5.26L17.19 3.45L20.55 6.81L18.74 8.95Z"/><circle cx="12" cy="12" r="3.2"/></svg>
     </button>
     <label class="switch" title="Encendido: al confirmar, la nota y el comentario se suben a Canvas. Apagado: modo prueba, solo se registra en tu computador.">
       <input type="checkbox" id="live" checked>
@@ -101,52 +101,51 @@
 
 <dialog id="dlg-settings">
   <h3>Configuración</h3>
-  <p class="small muted">Se guarda en el archivo <code>.env</code> de esta carpeta, <b>solo en tu computador</b>. Las claves
-    guardadas nunca se muestran: para cambiar una, escribe la nueva.</p>
+  <p class="small muted lead">Se guarda en el archivo <code>.env</code> de esta carpeta, solo en tu computador.
+    Las claves guardadas nunca se muestran: para cambiar una, escribe la nueva.</p>
 
   <div class="field">
-    <label for="set-CANVAS_TOKEN">Token de Canvas <span class="req">obligatorio</span></label>
+    <div class="lbl"><label for="set-CANVAS_TOKEN">Token de Canvas</label><button type="button" class="info" data-help="help-CANVAS_TOKEN" aria-expanded="false" aria-controls="help-CANVAS_TOKEN" title="¿Cómo lo obtengo?">i</button><span class="state" id="st-CANVAS_TOKEN"></span></div>
     <div class="secret"><input id="set-CANVAS_TOKEN" type="password" autocomplete="off" spellcheck="false">
-      <button type="button" class="quiet eye" data-eye="set-CANVAS_TOKEN" title="Mostrar / ocultar">👁</button></div>
-    <div class="state small" id="st-CANVAS_TOKEN"></div>
-    <details class="howto"><summary>¿Cómo obtengo el token?</summary><ol>
+      <button type="button" class="eye" data-eye="set-CANVAS_TOKEN" title="Mostrar u ocultar" aria-label="Mostrar u ocultar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+    <div class="help" id="help-CANVAS_TOKEN" hidden><ol>
       <li>Entra a Canvas en el navegador.</li>
-      <li>Haz clic en tu foto o en <b>Cuenta</b> (barra izquierda) → <b>Configuración</b>.</li>
+      <li>Haz clic en tu foto o en <b>Cuenta</b> (barra izquierda) y luego en <b>Configuración</b>.</li>
       <li>Baja hasta <b>Integraciones aprobadas</b> y presiona <b>+ Nuevo token de acceso</b>.</li>
       <li>En "Propósito" escribe <i>RLabGrader</i> y pon una fecha de expiración (por ejemplo, el fin del semestre).</li>
       <li>Presiona <b>Generar token</b>, cópialo y pégalo aquí. Canvas lo muestra <b>una sola vez</b>.</li>
-    </ol><p class="small muted">El token tiene tus mismos permisos en Canvas: no lo compartas. Si crees que alguien lo vio,
-      elimínalo en esa misma página y crea otro.</p></details>
+    </ol><p class="muted">El token tiene tus mismos permisos en Canvas: no lo compartas. Si crees que alguien lo vio,
+      elimínalo en esa misma página y crea otro.</p></div>
   </div>
 
   <div class="field">
-    <label for="set-COURSE_ID">Número del curso <span class="req">obligatorio</span></label>
+    <div class="lbl"><label for="set-COURSE_ID">Número del curso</label><button type="button" class="info" data-help="help-COURSE_ID" aria-expanded="false" aria-controls="help-COURSE_ID" title="¿Cómo lo obtengo?">i</button><span class="state" id="st-COURSE_ID"></span></div>
     <input id="set-COURSE_ID" inputmode="numeric" autocomplete="off" placeholder="ej. 106099">
-    <div class="state small" id="st-COURSE_ID"></div>
-    <details class="howto"><summary>¿Dónde lo veo?</summary>
-      <p>Entra al curso en Canvas y mira la dirección en el navegador: <code>…/courses/<b>106099</b></code>. Es ese número.</p></details>
+    <div class="help" id="help-COURSE_ID" hidden>
+      <p>Entra al curso en Canvas y mira la dirección en el navegador: <code>…/courses/<b>106099</b></code>. Es ese número.</p></div>
   </div>
 
   <div class="field">
-    <label for="set-GROQ_API_KEY">API key de Groq <span class="opt">opcional, para la sugerencia IA</span></label>
+    <div class="lbl"><label for="set-GROQ_API_KEY">API key de Groq</label><button type="button" class="info" data-help="help-GROQ_API_KEY" aria-expanded="false" aria-controls="help-GROQ_API_KEY" title="¿Cómo lo obtengo?">i</button><span class="opt">opcional, para la sugerencia IA</span><span class="state" id="st-GROQ_API_KEY"></span></div>
     <div class="secret"><input id="set-GROQ_API_KEY" type="password" autocomplete="off" spellcheck="false">
-      <button type="button" class="quiet eye" data-eye="set-GROQ_API_KEY" title="Mostrar / ocultar">👁</button></div>
-    <div class="state small" id="st-GROQ_API_KEY"></div>
-    <details class="howto"><summary>¿Cómo obtengo la API key?</summary><ol>
+      <button type="button" class="eye" data-eye="set-GROQ_API_KEY" title="Mostrar u ocultar" aria-label="Mostrar u ocultar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+    <div class="help" id="help-GROQ_API_KEY" hidden><ol>
       <li>Entra a <a href="https://console.groq.com" target="_blank" rel="noopener">console.groq.com</a> y crea una cuenta (puedes usar Google o GitHub).</li>
       <li>En el menú, ve a <b>API Keys</b> y presiona <b>Create API Key</b>.</li>
       <li>Ponle un nombre (ej. <i>RLabGrader</i>), copia la clave (empieza con <code>gsk_</code>) y pégala aquí. Se muestra una sola vez.</li>
-    </ol><p class="small muted">La cuenta gratuita tiene límites de uso: si se alcanzan, la IA puede tardar o fallar un rato.</p></details>
+    </ol><p class="muted">La cuenta gratuita tiene límites de uso: si se alcanzan, la IA puede tardar o fallar un rato.</p></div>
   </div>
 
-  <details class="field advanced"><summary class="small">Opciones avanzadas</summary>
-    <label for="set-CANVAS_URL">Dirección de Canvas</label>
-    <input id="set-CANVAS_URL" autocomplete="off" spellcheck="false" placeholder="https://cursos.canvas.uc.cl">
-    <div class="small muted">Solo cámbiala si tu Canvas no es el de la UC.</div>
+  <details class="advanced"><summary>Opciones avanzadas</summary>
+    <div class="field">
+      <div class="lbl"><label for="set-CANVAS_URL">Dirección de Canvas</label></div>
+      <input id="set-CANVAS_URL" autocomplete="off" spellcheck="false" placeholder="https://cursos.canvas.uc.cl">
+      <div class="small muted hint">Solo cámbiala si tu Canvas no es el de la UC.</div>
+    </div>
   </details>
 
   <div id="set-msg" class="small"></div>
-  <div class="row end"><button id="set-close" class="quiet">Cerrar</button><button id="set-test">Probar</button>
+  <div class="row end actions"><button id="set-close" class="quiet">Cerrar</button><button id="set-test">Probar</button>
     <button id="set-save" class="primary">Guardar</button></div>
 </dialog>
 
@@ -164,6 +163,6 @@
   <div class="row end"><button id="res-close" class="quiet">Cerrar</button><button id="res-save" class="primary">Guardar</button></div>
 </dialog>
 
-<script src="/static/app.js?v=8"></script>
+<script src="/static/app.js?v=9"></script>
 </body>
 </html>

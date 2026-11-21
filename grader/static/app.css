@@ -263,24 +263,44 @@ pre .katex-display { margin: .4em 0; }
 .tools .row button { white-space: nowrap; }
 
 /* configuración (⚙) */
-.gear { padding: 6px 8px; display: inline-flex; }
-.gear svg { width: 18px; height: 18px; fill: currentColor; }
-#dlg-settings { width: min(600px, 95vw); }
-#dlg-settings .field { margin: 14px 0; }
-#dlg-settings label { display: block; font-weight: 600; margin-bottom: 4px; }
-#dlg-settings .req { font-size: 11px; font-weight: 600; color: var(--bad); margin-left: 6px; }
-#dlg-settings .opt { font-size: 11px; font-weight: 500; color: var(--ink-2, #6b7280); margin-left: 6px; }
-#dlg-settings input { width: 100%; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 8px; font: inherit; font-size: 13px; }
-#dlg-settings .secret { display: flex; gap: 6px; }
-#dlg-settings .secret input { flex: 1; font-family: "JetBrains Mono", ui-monospace, monospace; }
-#dlg-settings .eye { padding: 4px 10px; }
-#dlg-settings .state { margin-top: 4px; }
-#dlg-settings .howto { margin-top: 6px; font-size: 12.5px; background: #f7f7f5; border: 1px solid var(--rule); border-radius: 8px; padding: 6px 10px; }
-#dlg-settings .howto summary { cursor: pointer; color: var(--ink-2, #4b5563); }
-#dlg-settings .howto ol { margin: 6px 0 4px; padding-left: 20px; }
-#dlg-settings .howto li { margin: 3px 0; }
-#dlg-settings .advanced summary { cursor: pointer; }
-#dlg-settings .advanced input { margin-top: 6px; }
-#set-msg { margin: 10px 0; }
+.gear { padding: 6px; display: inline-flex; }
+.gear svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; overflow: visible; }
+
+#dlg-settings { width: min(560px, 95vw); padding: 22px 24px 18px; }
+#dlg-settings h3 { margin-bottom: 4px; }
+#dlg-settings .lead { margin: 0 0 6px; }
+#dlg-settings .field { padding: 14px 0; border-top: 1px solid var(--rule-2); }
+#dlg-settings .lead + .field { border-top: 0; }
+#dlg-settings .lbl { display: flex; align-items: center; gap: 6px; margin-bottom: 7px; min-height: 22px; }
+#dlg-settings label { font-weight: 650; }
+#dlg-settings .opt { font-size: 12px; color: var(--ink-2); }
+#dlg-settings .state { margin-left: auto; }
+.pill { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 999px;
+  background: var(--rule-2); color: var(--ink-2); white-space: nowrap; }
+.pill.ok { background: var(--ok-bg); color: var(--ok); }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+#dlg-settings .info { width: 18px; height: 18px; padding: 0; border-radius: 50%; flex: none;
+  font: italic 700 11.5px/1 Georgia, serif; color: var(--ink-2); background: transparent; border: 1.5px solid currentColor; }
+#dlg-settings .info:hover, #dlg-settings .info[aria-expanded="true"] { color: var(--sheet); background: var(--blue); border-color: var(--blue); }
+#dlg-settings input { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--rule); border-radius: 8px;
+  background: #fff; font: inherit; font-size: 13.5px; }
+#dlg-settings input::placeholder { color: #9AA39A; }
+#dlg-settings .secret { position: relative; }
+#dlg-settings .secret input { padding-right: 40px; font-family: var(--mono); font-size: 12.5px; }
+#dlg-settings .eye { position: absolute; right: 3px; top: 3px; width: 30px; height: 30px; padding: 0;
+  border: 0; background: transparent; color: var(--ink-2); border-radius: 6px; }
+#dlg-settings .eye:hover { background: var(--rule-2); color: var(--ink); }
+#dlg-settings .eye svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+#dlg-settings .help { margin-top: 8px; padding: 10px 12px; font-size: 12.5px; line-height: 1.5;
+  background: var(--paper); border-left: 3px solid var(--blue); border-radius: 0 8px 8px 0; }
+#dlg-settings .help ol { margin: 0 0 6px; padding-left: 18px; }
+#dlg-settings .help li { margin: 2px 0; }
+#dlg-settings .help p { margin: 0; }
+#dlg-settings .advanced { border-top: 1px solid var(--rule-2); padding-top: 12px; }
+#dlg-settings .advanced > summary { font-size: 12.5px; }
+#dlg-settings .advanced .field { border-top: 0; padding-bottom: 0; }
+#dlg-settings .hint { margin-top: 5px; }
+#set-msg { margin: 12px 0 0; }
+#set-msg:empty { display: none; }
 #set-msg > div { margin: 3px 0; }
-#dlg-settings .row.end { justify-content: flex-end; gap: 8px; }
+#dlg-settings .actions { justify-content: flex-end; gap: 8px; margin-top: 16px; }

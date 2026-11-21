@@ -106,12 +106,12 @@ async function openSettings(firstTime = false) {
   for (const k of KEYS) $("#set-" + k).value = "";
   for (const k of ["CANVAS_TOKEN", "GROQ_API_KEY"]) $("#set-" + k).type = "password";
   for (const k of ["CANVAS_TOKEN", "GROQ_API_KEY"]) {
-    $("#set-" + k).placeholder = st[k].set ? `Configurado ✓ (termina en …${st[k].hint}) — escribe otro para cambiarlo` : "Pega aquí la clave";
+    $("#set-" + k).placeholder = st[k].set ? `••••••••${st[k].hint}` : "Pega aquí la clave";
   }
-  $("#set-COURSE_ID").placeholder = st.COURSE_ID.set ? `${st.COURSE_ID.hint} (escribe otro para cambiarlo)` : "ej. 106099";
+  $("#set-COURSE_ID").placeholder = st.COURSE_ID.set ? st.COURSE_ID.hint : "ej. 106099";
   $("#set-CANVAS_URL").placeholder = st.CANVAS_URL.hint;
   for (const k of ["CANVAS_TOKEN", "COURSE_ID", "GROQ_API_KEY"]) {
-    $("#st-" + k).innerHTML = st[k].set ? '<span class="ok">✓ configurado</span>' : (k === "GROQ_API_KEY" ? '<span class="muted">sin configurar</span>' : '<span class="bad">falta</span>');
+    $("#st-" + k).innerHTML = st[k].set ? '<span class="pill ok">✓ configurado</span>' : (k === "GROQ_API_KEY" ? '<span class="pill">sin configurar</span>' : '<span class="pill bad">falta</span>');
   }
   $("#set-msg").innerHTML = firstTime ? '<div class="note warn">Para empezar, completa el <b>token de Canvas</b> y el <b>número del curso</b>.</div>' : "";
   if (!$("#dlg-settings").open) $("#dlg-settings").showModal();
@@ -495,6 +495,9 @@ $("#btn-settings").onclick = () => openSettings().catch((e) => alert(e.message))
 $("#set-close").onclick = () => $("#dlg-settings").close();
 $("#set-test").onclick = () => busy($("#set-test"), async () => showTest(await post("/api/settings/test", settingsValues())));
 $("#set-save").onclick = () => busy($("#set-save"), saveSettings);
+document.querySelectorAll("[data-help]").forEach((b) => (b.onclick = () => {
+  const el = $("#" + b.dataset.help); el.hidden = !el.hidden; b.setAttribute("aria-expanded", String(!el.hidden));
+}));
 document.querySelectorAll("[data-eye]").forEach((b) => (b.onclick = () => {
   const el = $("#" + b.dataset.eye); el.type = el.type === "password" ? "text" : "password";
 }));
