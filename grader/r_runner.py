@@ -14,7 +14,7 @@ from . import config, r_packages, store
 from .assessments import segment
 
 MAX_OUT = 8000
-RUNNER_VERSION = 6  # subir al cambiar prepare() o runner.R: invalida la caché
+RUNNER_VERSION = 10  # subir al cambiar prepare() o runner.R: invalida la caché
 MAX_PLOTS = 12
 MEM_BYTES = 2 * 1024**3
 
@@ -32,6 +32,7 @@ class RResult:
     code_run: str
     changes: list[str]
     plots: list[str] = None  # PNG en base64 (data URI)
+    system_error: str | None = None  # R se cayó por un problema del computador, no del alumno
 
     def to_dict(self):
         return asdict(self)
@@ -39,7 +40,13 @@ class RResult:
 
 _CONSOLE_CMD = re.compile(r"^\s*[>+] ?")
 _CONSOLE_NOISE = re.compile(r"^\s*(\[\d+\]|R version|Copyright|Platform:|Type '|You are welcome|"
-                            r"Natural language|R is free|R is a collaborative|'citation\(\)'|'help|'q\(\)')")
+                            r"Natural language|R is free|R is a collaborative|'citation\(\)'|'help|'q\(\)'|"
+                            # salida típica de R pegada junto al código
+                            r"Aviso:|Avisos:|Mensajes de aviso|Warning messages?:|Warning in |Error in |Error:|"
+                            r"package ['‘].*['’] was built|Loading required package|Cargando paquete|"
+                            r"Attaching package|The following objects? (is|are) masked|"
+                            r"Fitting of the distribution|Parameters\s*:|estimate\s+Std\. Error|"
+                            r"Loglikelihood:|Min\.\s+1st Qu\.|Mín\.|Length\s+Class\s+Mode)")
 _IDENT = r"[A-Za-z][A-Za-z0-9._]*"
 _KNOWN = {"T", "F", "TRUE", "FALSE", "NULL", "NA", "NaN", "Inf", "c", "data", "df", "letters", "LETTERS",
           "pi", "iris", "mtcars", "month.name"}
@@ -61,6 +68,40 @@ def data_like_uses(code) -> list[str]:
     used += re.findall(rf"(?<![\w.$])({_IDENT})\s*%>%", code)
     used += re.findall(rf"\bdata\s*=\s*({_IDENT})\b", code)
     return list(dict.fromkeys(used))
+
+
+def strip_comments(code: str) -> str:
+    """Quita los comentarios (# hasta el fin de línea, fuera de comillas) para analizar el código."""
+    out = []
+    for line in code.splitlines():
+        q, buf = None, []
+        for ch in line:
+            if q:
+                buf.append(ch)
+                if ch == q:
+                    q = None
+            elif ch in "\"'`":
+                q = ch; buf.append(ch)
+            elif ch == "#":
+                break
+            else:
+                buf.append(ch)
+        out.append("".join(buf))
+    return "\n".join(out)
+
+
+def _defined_before_use(code, var) -> bool:
+    """True si el alumno asigna `var` antes (o en la misma línea) de usarla por primera vez.
+    Si la usa antes de definirla (p. ej. pegó la consola al final), hay que precargarla."""
+    v = re.escape(var)
+    use_line = assign_line = None
+    for i, line in enumerate(strip_comments(code).splitlines()):
+        if assign_line is None and _assigned(line, var):
+            assign_line = i
+        rest = re.sub(rf"^\s*{v}\s*(<<?-|=(?!=))", "", line)
+        if use_line is None and re.search(rf"(?<![\w.$]){v}(?![\w(])", rest):
+            use_line = i
+    return assign_line is not None and (use_line is None or assign_line <= use_line)
 
 
 def _assigned(code, var):
@@ -110,6 +151,19 @@ def _strip_prompts(code, changes):
     return "\n".join(out)
 
 
+_OUTPUT_ROW = re.compile(r"^\s*[-\w.%]+(?:\s+[-\w.%]+)+\s*$")
+_R_WORDS = {"if", "else", "for", "while", "repeat", "function", "return", "in", "next", "break",
+            "library", "require", "print", "TRUE", "FALSE"}
+
+
+def _is_output_row(line) -> bool:
+    """Fila de resultados pegada de la consola ('shape 4.98 0.305', '  shape   rate').
+    Varias palabras/números separados solo por espacios nunca son R válido, así que es seguro comentarla."""
+    if not _OUTPUT_ROW.match(line):
+        return False
+    return line.split()[0] not in _R_WORDS
+
+
 def _comment_headers(code, changes):
     """Títulos sin '#' ('Pregunta 1:', '1.- código') rompen R: se comentan."""
     out, n = [], 0
@@ -120,7 +174,7 @@ def _comment_headers(code, changes):
             out.append(f"# [título] {l.strip() if not h[2] else l.strip()[:len(l.strip()) - len(h[2])].strip()}")
             if h[2]:
                 out.append(h[2])
-        elif not l.lstrip().startswith("#") and _CONSOLE_NOISE.match(l):
+        elif not l.lstrip().startswith("#") and (_CONSOLE_NOISE.match(l) or _is_output_row(l)):
             n += 1
             out.append("# [salida] " + l)
         else:
@@ -161,18 +215,18 @@ def prepare(code: str, data_names: list[str]) -> tuple[str, list[str]]:
         changes.append(f"file.choose() → '{data_names[0]}'")
 
     # Variables de datos usadas sin cargarlas (típico de importar con RStudio y no pegar esa línea)
-    def assigned(var):
-        return _assigned(code, var)
+    def assigned(var):  # definida antes de su primer uso (sin contar comentarios)
+        return _defined_before_use(code, var)
 
     preload = []
     by_stem = {Path(n).stem: n for n in data_names}
     for var, name in by_stem.items():  # mismo nombre que el archivo: Taller1, fish...
-        if re.fullmatch(_IDENT, var) and re.search(rf"(?<![\w.$]){re.escape(var)}(?![\w.(])", code) \
+        if re.fullmatch(_IDENT, var) and re.search(rf"(?<![\w.$]){re.escape(var)}(?![\w.(])", strip_comments(code)) \
                 and not assigned(var):
             preload.append(f"{var} <- {_reader(name)}")
             changes.append(f"precargado: {preload[-1]}")
     if data_names:  # otros nombres usados como data frame sin definirlos
-        used = data_like_uses(code)
+        used = data_like_uses(strip_comments(code))
         ticks = re.findall(r"`([^`\n]+)`", code)                                          # `Taller1.(1)`
         for var in dict.fromkeys(used + ticks):
             if var in by_stem or var in _KNOWN or assigned(var) or var in _NOT_DATA:
@@ -184,7 +238,7 @@ def prepare(code: str, data_names: list[str]) -> tuple[str, list[str]]:
             changes.append(f"precargado (supuesto): {preload[-1]}")
 
     libs = []
-    for pkg in r_packages.inferred(code):
+    for pkg in r_packages.inferred(strip_comments(code)):
         libs.append(f"suppressPackageStartupMessages(library({pkg}))")
         changes.append(f"cargado el paquete {pkg} (usó sus funciones sin library())")
     out = libs + list(preload)
@@ -224,7 +278,11 @@ def _env(home) -> dict:
     """Entorno para el código del alumno: sin ninguna variable que parezca una clave."""
     env = {k: v for k, v in os.environ.items() if not _SECRET.search(k)}
     libs = os.pathsep.join(x for x in (str(r_packages.RLIB), _lib_paths()) if x)
-    env.update({"HOME": home, "USERPROFILE": home, "LANG": "C.UTF-8", "R_LIBS": libs})
+    env.update({"HOME": home, "USERPROFILE": home, "LANG": "C.UTF-8", "R_LIBS": libs,
+                # Un solo hilo para álgebra lineal: con muchos núcleos, OpenBLAS reserva memoria por hilo
+                # y supera el límite de memoria, matando R aunque el código del alumno esté bien.
+                "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1",
+                "GOTO_NUM_THREADS": "1", "VECLIB_MAXIMUM_THREADS": "1"})
     return env
 
 
@@ -250,9 +308,11 @@ def _retry_vars(prepared, stderr, data_names) -> list[str]:
     """Variables que R no encontró y que el alumno nunca definió: probablemente su base de datos
     con otro nombre (bd, datos...). Se excluyen las usadas como valor de un argumento (mean = media)."""
     out = []
+    data_like = set(data_like_uses(strip_comments(prepared)))
     for var in dict.fromkeys(_NOT_FOUND.findall(stderr)):
-        if not re.fullmatch(_IDENT, var) or var in _KNOWN or var in _NOT_DATA or _assigned(prepared, var):
-            continue
+        if not re.fullmatch(_IDENT, var) or var in _KNOWN or var in _NOT_DATA \
+                or _defined_before_use(prepared, var) or var not in data_like:
+            continue  # solo variables usadas como base de datos (X$col, X[...], f(X, ...))
         if re.search(rf"\b(?!data\b)\w+\s*=\s*{re.escape(var)}\b(?!\s*\$)", prepared):
             continue
         out.append(var)
@@ -277,6 +337,24 @@ def _execute(prepared, data_files, rscript, env_home_files):
                         returncode=None, timed_out=True, plots=_plots(tmp))
 
 
+# Fallas del entorno (memoria, cierre de R, librerías del sistema): no son culpa del alumno
+_SYSTEM_ERR = re.compile(r"OpenBLAS error|BLAS error|cannot allocate (vector|memory)|memory exhausted|"
+                         r"caught segfault|Segmentation fault|\*\*\* caught|Killed|Illegal instruction|"
+                         r"Fatal error|unable to load shared object|std::bad_alloc", re.I)
+
+
+def _system_error(r) -> str | None:
+    if r["timed_out"]:
+        return None
+    m = _SYSTEM_ERR.search(r["stderr"] or "")
+    if m:
+        line = next((l for l in r["stderr"].splitlines() if m.group(0).lower() in l.lower()), m.group(0))
+        return line.strip()[:200]
+    if r["returncode"] is not None and r["returncode"] < 0:  # R terminado por una señal del sistema
+        return f"R se cerró inesperadamente (señal {-r['returncode']})"
+    return None
+
+
 def run(code: str, data_files: list[Path], use_cache=True) -> RResult:
     names = [p.name for p in data_files]
     key = f"r{RUNNER_VERSION}:" + hashlib.sha256((code + "|" + ",".join(names)).encode()).hexdigest()
@@ -285,7 +363,8 @@ def run(code: str, data_files: list[Path], use_cache=True) -> RResult:
     prepared, changes = prepare(code, names)
     rscript = _rscript()
     # Paquetes: instalar los que falten (en data/Rlib, desde CRAN)
-    pkgs = list(dict.fromkeys(r_packages.explicit(code) + r_packages.inferred(code)))
+    nc = strip_comments(code)
+    pkgs = list(dict.fromkeys(r_packages.explicit(nc) + r_packages.inferred(nc)))
     new, failed = r_packages.ensure(pkgs, rscript, _env(str(config.DATA_DIR)))
     changes += [f"instalado el paquete {p} (no estaba en este computador)" for p in new]
     changes += [f"no se pudo instalar el paquete {p}: sus errores NO son del alumno" for p in failed]
@@ -298,6 +377,6 @@ def run(code: str, data_files: list[Path], use_cache=True) -> RResult:
         changes += [f"precargado (supuesto, R no encontraba '{v}'): {l}" for v, l in zip(extra, pre)]
         r = _execute(prepared, data_files, rscript, None)
     res = RResult(r["ok"], r["stdout"], r["stderr"], r["returncode"], r["timed_out"], prepared, changes,
-                  r["plots"])
+                  r["plots"], _system_error(r))
     store.cache_set(key, res.to_dict())
     return res

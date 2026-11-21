@@ -238,6 +238,10 @@ class Service:
         if r:
             ejec = ("Terminó sin errores." if r["ok"] else "Terminó con ERROR." if not r["timed_out"]
                     else "Excedió el tiempo límite.")
+            if r.get("system_error"):
+                ejec += ("\nATENCIÓN: la ejecución se interrumpió por una FALLA DEL COMPUTADOR, no del alumno ("
+                         + r["system_error"] + "). Lo que no alcanzó a ejecutarse NO cuenta en su contra: "
+                         "juzga esas líneas por su lógica y por la respuesta ingresada.")
             if r["changes"]:
                 ejec += "\nAjustes automáticos hechos por el sistema (no son del alumno): " + "; ".join(r["changes"])
             if r.get("plots"):

@@ -285,10 +285,11 @@ function renderRun() {
   if (!r) return "";
   if (r.error) return `<div class="card bad small">${esc(r.error)}</div>`;
   const nErr = (r.stderr.match(/^Error/gm) || []).length;
-  const st = r.timed_out ? '<span class="bad">tiempo excedido</span>' : r.ok ? '<span class="ok">sin errores</span>' : `<span class="bad">${nErr || ""} error(es)</span>`;
+  const st = r.system_error ? '<span class="warn">falla del computador</span>' : r.timed_out ? '<span class="bad">tiempo excedido</span>' : r.ok ? '<span class="ok">sin errores</span>' : `<span class="bad">${nErr || ""} error(es)</span>`;
+  const sys = r.system_error ? `<div class="note warn small">⚠ R se interrumpió por un problema de este computador, <b>no del código del alumno</b>: <code>${esc(r.system_error)}</code>. Lo que no alcanzó a ejecutarse no se puede juzgar con esta salida.</div>` : "";
   const ch = r.changes.length ? `<details class="small"><summary>${r.changes.length} ajuste(s) automático(s)</summary><ul>${r.changes.map((c) => `<li>${esc(c)}</li>`).join("")}</ul></details>` : "";
   const plots = (r.plots || []).map((p, k) => `<a href="${p}" target="_blank"><img src="${p}" alt="Gráfico ${k + 1}"></a>`).join("");
-  return `<div class="card ${r.edited ? "run-edited" : ""}"><b>Ejecución en R</b>${r.edited ? ' <span class="chip warn">código editado</span>' : ""} · ${st}${ch}
+  return `<div class="card ${r.edited ? "run-edited" : ""}"><b>Ejecución en R</b>${r.edited ? ' <span class="chip warn">código editado</span>' : ""} · ${st}${sys}${ch}
     <pre class="out">${esc(r.stdout)}${r.timed_out ? `<span class="err">\n${esc(r.stderr)}</span>` : ""}</pre>
     ${plots ? `<div class="plots">${plots}</div>` : ""}</div>`;
 }
