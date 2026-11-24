@@ -7,7 +7,8 @@ from .taller import TallerType
 
 PATTERNS = {
     "bono": re.compile(r"^\s*bono\s*\d{2}\s*$", re.I),      # Bono03, Bono05...
-    "taller": re.compile(r"^\s*taller\s*\d+\s*$", re.I),    # Taller 1, Taller 2...
+    # "Taller" + número al inicio: Taller 1, "Taller 2: (01)", "Taller 3 - Sección 5"... (no "Taller evaluado 01-J")
+    "taller": re.compile(r"^\s*taller\s*\d+(?!\d)", re.I),
 }
 
 _TYPES = {

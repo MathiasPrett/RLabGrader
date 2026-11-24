@@ -47,6 +47,8 @@ class Service:
         """Solo BonoXX y Taller N (los del laboratorio)."""
         out = []
         for a in self.client.quiz_assignments():
+            if a.get("published") is False:  # sin publicar: no tiene entregas y Canvas no deja leerlas
+                continue
             t = detect_type(a["name"])
             if t:
                 out.append({"id": a["id"], "name": a["name"], "quiz_id": a["quiz_id"], "type": t,
