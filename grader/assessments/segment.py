@@ -25,8 +25,15 @@ _TRAILING = re.compile(rf"^[^#]*\S[^#]*#+\s*{_WORD}[\s._]*(?:n[°º]\s*)?(\d{{1,
 _ORDINAL = re.compile(rf"^\s*#*[\s#*=_\-]*(?:({_ORD})[\s_]+pregunta|pregunta[\s_]+({_ORD}))", re.I)
 
 
+_QUOTED = re.compile(rf"""^\s*["']\s*{_WORD}[\s._]*(?:n[°º]\s*)?(\d{{1,2}})\s*[:.)\-–]*\s*["']\s*$""", re.I)
+
+
 def header_number(line: str, max_n: int = 20) -> tuple[int, bool, str] | None:
     """(número, es_comentario, código_que_sigue) si la línea es un título de pregunta."""
+    m = _QUOTED.match(line)
+    if m:  # "Pregunta 1" escrito como texto entre comillas: es R válido, no hay que comentarlo
+        n = int(m.group(1))
+        return (n, True, "") if 1 <= n <= max_n else None
     m = _ORDINAL.match(line)
     if m:
         n = ORDINALS[(m.group(1) or m.group(2)).lower()]

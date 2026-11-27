@@ -304,3 +304,34 @@ pre .katex-display { margin: .4em 0; }
 #set-msg:empty { display: none; }
 #set-msg > div { margin: 3px 0; }
 #dlg-settings .actions { justify-content: flex-end; gap: 8px; margin-top: 16px; }
+#dlg-settings select { width: 100%; height: 36px; padding: 0 8px; border: 1px solid var(--rule); border-radius: 8px;
+  font: inherit; font-size: 13px; background: #fff; }
+/* lo marcado como oculto (p. ej. los campos del proveedor de IA no elegido) siempre se oculta */
+#dlg-settings [hidden] { display: none !important; }
+#set-GEMINI_MODEL { margin-top: 6px; }
+#gemini-cost { margin-top: 6px; }
+/* error concreto que detectó la IA */
+.ai-error { margin: 8px 0; padding: 7px 10px; border-left: 3px solid var(--bad); background: #FDF1F0;
+  border-radius: 0 6px 6px 0; line-height: 1.45; }
+.ai-error.none { border-left-color: #E8C989; background: #FFF8E6; color: #6b4a00; }
+
+/* lote IA, estadísticas, punto base, comentarios por pregunta */
+.ai-all { margin-top: 6px; }
+.ai-all button { width: 100%; }
+#ai-all-msg { margin-top: 4px; }
+.ai-ready { font-size: 12px; margin-left: 2px; }
+.badge.warnb { background: #FFF1CC; color: #8a5a00; }
+#stats-bar { padding: 8px 10px 0; }
+#stats-bar button { width: 100%; font-size: 12.5px; text-align: left; }
+.stats-alert { background: #FFF1CC; border: 1px solid #E8C989; color: #6b4a00; font-weight: 600; }
+#dlg-stats { width: min(820px, 95vw); }
+table.stats { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; }
+table.stats th, table.stats td { padding: 6px 8px; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; }
+table.stats td.num { white-space: nowrap; }
+table.stats tr.alert td { background: #FFF8E6; }
+table.stats .bar { display: inline-block; width: 60px; height: 6px; background: #eee; border-radius: 3px; vertical-align: middle; }
+table.stats .bar i { display: block; height: 100%; background: var(--ok, #15803d); border-radius: 3px; }
+#qc-wrap { margin-top: 8px; }
+.base-add { display: flex; gap: 6px; align-items: center; margin: 6px 0; }
+.base-add[hidden] { display: none; }
+.qc-label { display: block; margin-bottom: 4px; }

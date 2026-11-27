@@ -19,13 +19,18 @@ def _int(v):
 
 def _load_keys():
     """Claves que se pueden cambiar desde la app (⚙). reload() las vuelve a leer del .env."""
-    global CANVAS_URL, CANVAS_TOKEN, COURSE_ID, AI_PROVIDER, GROQ_API_KEY, GROQ_MODEL
+    global CANVAS_URL, CANVAS_TOKEN, COURSE_ID, AI_PROVIDER, GROQ_API_KEY, GROQ_MODEL, GEMINI_API_KEY, GEMINI_MODEL, GEMINI_FALLBACK_MODELS
     CANVAS_URL = (os.environ.get("CANVAS_URL") or DEFAULT_CANVAS_URL).rstrip("/")
     CANVAS_TOKEN = os.environ.get("CANVAS_TOKEN", "")
     COURSE_ID = _int(os.environ.get("COURSE_ID"))
     AI_PROVIDER = os.environ.get("AI_PROVIDER") or "groq"
     GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
     GROQ_MODEL = os.environ.get("GROQ_MODEL") or "openai/gpt-oss-120b"
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+    GEMINI_MODEL = os.environ.get("GEMINI_MODEL") or "gemini-3.8-flash"
+    # respaldo si el modelo elegido está saturado (503); separados por coma
+    GEMINI_FALLBACK_MODELS = [m.strip() for m in (os.environ.get("GEMINI_FALLBACK_MODELS")
+                              or "gemini-3.7-flash,gemini-flash-latest").split(",") if m.strip()]
 
 
 def reload():

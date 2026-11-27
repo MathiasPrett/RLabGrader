@@ -45,7 +45,11 @@ async def same_origin_only(request: Request, call_next):
         origin = request.headers.get("origin")
         if origin is not None and not _own_origin(origin, request.url.port):
             return JSONResponse({"error": "Petición rechazada: no viene de RLabGrader"}, status_code=403)
-    return await call_next(request)
+    response = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/static/"):
+        # que el navegador siempre revise si hay una versión nueva (evita mezclar HTML nuevo con JS viejo)
+        response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 @app.exception_handler(CanvasError)
@@ -66,6 +70,9 @@ class SettingsReq(BaseModel):
     GROQ_API_KEY: str | None = None
     COURSE_ID: str | None = None
     CANVAS_URL: str | None = None
+    AI_PROVIDER: str | None = None
+    GEMINI_API_KEY: str | None = None
+    GEMINI_MODEL: str | None = None
 
 
 @app.get("/api/settings")
@@ -126,16 +133,45 @@ def suggest(aid: int, uid: int, body: RunReq):
     return s.suggest(s.load(aid), uid, not body.fresh, body.code)
 
 
+@app.get("/api/eval/{aid}/stats")
+def stats(aid: int):
+    s = svc()
+    return s.stats_view(s.load(aid))
+
+
+class BatchReq(BaseModel):
+    group: str = "Todos"
+
+
+@app.post("/api/eval/{aid}/suggest_all")
+def suggest_all(aid: int, body: BatchReq):
+    s = svc()
+    return s.start_batch(s.load(aid), body.group)
+
+
+@app.get("/api/eval/{aid}/suggest_all")
+def suggest_all_status(aid: int):
+    return svc().batch_status(aid)
+
+
+@app.post("/api/eval/{aid}/suggest_all/cancel")
+def suggest_all_cancel(aid: int):
+    return svc().cancel_batch(aid)
+
+
 class GradeReq(BaseModel):
     fractions: list[float]
     dry_run: bool = True  # el interruptor de la app; si no viene, NO se envía
     comment: str = ""
+    item_comments: list[str] = []  # talleres: un comentario por pregunta
+    add_base: bool = False  # asignar el punto base (no marcado) en la pregunta de código
 
 
 @app.post("/api/eval/{aid}/student/{uid}/grade")
 def grade(aid: int, uid: int, body: GradeReq):
     s = svc()
-    return s.grade(s.load(aid), uid, body.fractions, body.comment, body.dry_run)
+    return s.grade(s.load(aid), uid, body.fractions, body.comment, body.dry_run, body.item_comments,
+                   body.add_base)
 
 
 class TextReq(BaseModel):

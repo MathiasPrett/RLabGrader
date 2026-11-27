@@ -28,6 +28,14 @@ alumnos, su respuesta, su código R ejecutado y, si lo pides, una **primera opin
 - **Editar el código del alumno (solo local)**: con el lápiz ✏ en la esquina del recuadro del código
   puedes corregir un detalle y volver a ejecutarlo; aparece "⚠ No es el original" y un botón
   **Restablecer**. Mientras esté editado, R y la sugerencia IA usan tu versión. Nada de eso se sube a Canvas.
+- **✨ IA para todos los pendientes**: pide en segundo plano la sugerencia de todo el grupo cargado;
+  mientras tanto puedes seguir corrigiendo, y al abrir a cada alumno la sugerencia aparece al instante.
+- **Posibles errores en la pauta**: al cargar una evaluación se revisan las respuestas de todo el curso.
+  Si muchos alumnos coinciden en un mismo valor distinto a la clave de Canvas, se avisa arriba de la
+  lista y en la pregunta ("la clave podría estar mal"), con estadísticas por pregunta.
+- **Punto base** (la nota parte en 1: talleres de 6 puntos + 1 base = 7): si un alumno no tiene el punto base (no marcó la pregunta, o esa pregunta quedó con 0 puntos en Canvas), lo avisa y, por defecto, se lo asigna en la pregunta de código y agrega "*Punto base añadido" al comentario. Se puede desmarcar.
+- **Comentarios por pregunta** en talleres: cada comentario queda en su pregunta en Canvas, además del
+  comentario general de la entrega.
 - **✨ Sugerencia IA** (opcional, con botón): puntaje según la pauta, razón y comentario sugerido.
   **No se envía el nombre ni el ID del alumno** a la IA.
 - **Confirmar y subir**: escribe el puntaje y el comentario en Canvas, solo cuando tú lo confirmas.
@@ -107,14 +115,26 @@ mismos permisos** (debes ser ayudante/profesor del curso).
 
 Si lo pierdes o crees que alguien lo vio, vuelve a esa página y elimínalo; luego crea otro.
 
-### 5. Obtener la API key de Groq (opcional, para la IA)
+### 5. Obtener una API key para la IA (opcional)
 
+Puedes usar **Groq** (gratis) o **Google Gemini** (si tienes créditos de Google Cloud). Se elige en
+⚙ Configuración → *Proveedor de IA*.
+
+**Groq**
 1. Entra a <https://console.groq.com> y crea una cuenta (puedes usar Google o GitHub).
 2. En el menú, ve a **API Keys** y presiona **Create API Key**.
 3. Ponle un nombre (ej. `RLabGrader`) y **copia la clave** (empieza con `gsk_`). Se muestra una sola vez.
 
-Sin esta clave la app funciona igual; solo el botón de IA mostrará un aviso.
-La cuenta gratuita de Groq tiene límites de uso: si se alcanzan, la IA puede tardar o fallar un rato.
+La cuenta gratuita de Groq permite aprox. **una sugerencia de taller por minuto**; si pides más
+seguido, la app espera sola unos segundos.
+
+**Google Gemini**
+1. Entra a <https://aistudio.google.com/apikey> con tu cuenta de Google.
+2. Presiona **Create API key** y elige el proyecto de Google Cloud donde tienes los créditos.
+3. Copia la clave (normalmente empieza con `AIza`). En ⚙ puedes elegir el modelo (por defecto
+   `gemini-3.8-flash`); **Probar** muestra los que tu clave tiene disponibles.
+
+Sin ninguna clave la app funciona igual; solo el botón de IA mostrará un aviso.
 
 ### 6. Configurar tus claves
 
@@ -240,7 +260,7 @@ Si borras el archivo, la evaluación vuelve a funcionar como siempre.
 | `grader/canvas_client.py` | Conexión con la API de Canvas |
 | `grader/roster.py` | Cruce de la planilla de grupos con los alumnos de Canvas |
 | `grader/assessments/` | Tipos de evaluación (bono, taller), pautas y separación del código por pregunta |
-| `grader/ai/` | IA detrás de una fachada (`facade.py`); proveedores en `providers/` (hoy: Groq) |
+| `grader/ai/` | IA detrás de una fachada (`facade.py`); proveedores en `providers/` (Groq y Gemini) |
 | `grader/r_runner.py`, `grader/runner.R` | Preparación y ejecución tolerante del código R |
 | `grader/service.py`, `grader/app.py` | Lógica y servidor web |
 | `grader/static/`, `grader/templates/` | Interfaz |
@@ -254,13 +274,13 @@ y regístralo en `grader/ai/registry.py`. Para otro tipo de evaluación: crea un
 ## Descargo de responsabilidad
 
 **Herramienta no oficial.** RLabGrader es un proyecto personal e independiente. No está afiliado,
-respaldado ni mantenido por Instructure (Canvas), Groq, ninguna universidad ni ningún curso.
+respaldado ni mantenido por Instructure (Canvas), Groq, Google, ninguna universidad ni ningún curso.
 "Canvas" y "SpeedGrader" son marcas de sus respectivos dueños.
 
 **Uso bajo tu propia responsabilidad.** El software se entrega "tal cual", sin garantías de ningún
 tipo. El autor no se hace responsable de ningún daño, pérdida de datos, error en calificaciones,
 filtración de información ni de cualquier mal uso que se haga de esta herramienta, incluido su uso
-en contra de las normas de tu institución, curso o de las condiciones de uso de Canvas o Groq.
+en contra de las normas de tu institución, curso o de las condiciones de uso de Canvas, Groq o Google.
 Cada persona que la usa es la única responsable de cumplir esas normas y de proteger sus claves y
 los datos de los estudiantes.
 

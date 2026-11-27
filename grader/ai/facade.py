@@ -22,6 +22,7 @@ class ItemSuggestion(BaseModel):
     codigo_funciona: bool | None = None
     codigo_correcto: bool | None = None
     razon: str = ""
+    error: str = ""                     # el error concreto: línea, qué hace y qué debía hacer
     comentario_sugerido: str = ""
     observaciones_codigo: str = ""
     lineas: list[list[int]] | None = None  # dónde está el código de esta pregunta
@@ -57,6 +58,7 @@ class ItemCase:
     opciones: list[str] = field(default_factory=list)
     fragmento_lineas: list[list[int]] = field(default_factory=list)
     fragmento_origen: str = "todo"
+    aviso_clave: str = ""  # muchos alumnos coinciden en otro valor: la clave podría estar mal
 
 
 @dataclass
@@ -100,13 +102,58 @@ Reglas:
   pedido (tipo de gráfico, variables, filtro de datos correcto).
 - Si el código obtiene el valor correcto pero la respuesta ingresada difiere (redondeo, tipeo,
   porcentaje en vez de proporción), dilo explícitamente.
+
+Cómo elegir el nivel (usa estos criterios junto con la pauta):
+- 1: código que resuelve lo pedido y respuesta correcta. Un error aislado en una línea que no afecta
+  el cálculo (texto suelto, un punto, un comando de más que falla) no baja el puntaje.
+- 0.7: SOLO si la salida de R muestra que el código obtiene el valor esperado (dentro del margen),
+  pero la respuesta ingresada es incorrecta o falta (no la escribió, la copió mal, redondeó mal).
+  Si el código obtiene un valor distinto al esperado, NO es 0.7.
+- 0.5: el código funciona y apunta a lo pedido, pero tiene un error de cálculo o de lectura del
+  enunciado: probabilidad conjunta en vez de condicional, varianza en vez de desviación estándar,
+  olvidar un filtro, usar la función equivocada (pexp en vez de dexp), un detalle del intervalo, etc.
+  También 0.5 si la respuesta es correcta pero el código tiene un error menor que impide ejecutarlo
+  (una coma o un nombre mal escrito), o si la respuesta es correcta y no hay código (según la pauta).
+- 0: no hay código; el código no tiene relación con la pregunta; no funciona y la respuesta es
+  incorrecta; o está INCOMPLETO (solo carga datos, define parámetros o hace pasos previos sin llegar a
+  calcular lo pedido) y no hay respuesta correcta. No uses 0 si el código sí calcula lo pedido con un
+  error puntual (eso es 0.5).
+- Calcular otro evento, otra condición u otro intervalo (por ejemplo T = 175 en vez de T ≥ 175, o una
+  probabilidad conjunta en vez de condicional) es un error de cálculo o de lectura: 0.5, no 0.7.
+- MÉTODO PEDIDO: si el enunciado exige un modelo o técnica (normal bivariada, TCL, máxima
+  verosimilitud, método de momentos, una distribución dada) y el alumno calcula otra cosa (por
+  ejemplo una proporción empírica filtrando los datos con mean(), table() o prop.table() en vez de
+  usar pnorm/pmvnorm con los parámetros estimados), el código NO es correcto aunque el número se
+  parezca al esperado: corresponde como máximo 0.5. Verifica siempre que la técnica usada sea la pedida.
+- Revisa la salida real de R antes de afirmar qué valor obtiene el código; no lo supongas.
+- AVISO DE CLAVE: si una pregunta trae ese aviso (muchos alumnos llegaron al mismo valor distinto a la
+  clave), la clave de Canvas podría estar mal. Si el código del alumno es correcto según el enunciado y
+  obtiene ese valor, NO lo cuentes como error: sugiere el puntaje como si fuera correcta, con confianza
+  "media", y en "razon" recomienda al ayudante revisar la clave. Si el código tiene otro error, evalúalo
+  normalmente.
 - Comentarios para el alumno: breves (1-2 frases), en español, respetuosos y concretos.
   Si la pregunta tiene puntaje completo pueden ir vacíos.
+
+ERROR CONCRETO (obligatorio si el puntaje es menor que 1):
+- En "error" di exactamente qué hizo mal el alumno: cita la línea (número) y el fragmento de su código,
+  qué calcula ese fragmento y qué debía calcular según el enunciado. Ejemplos:
+  "Línea 14: pnorm(6, mu_cond, ...) usa mu_cond con T = 175, pero el enunciado condiciona en T ≥ 175."
+  "Línea 8: usa var(x) como desviación estándar en pnorm; debía usar sqrt(var(x))."
+  "Línea 3: prop.table(table(...)) da la probabilidad conjunta; se pedía la condicional (margin = 1)."
+  "No entregó código para esta pregunta." / "Respuesta ingresada 0.31, pero su código obtiene 0.3046."
+- Para encontrarlo, compara el enunciado (condiciones, desigualdades, filtros, parámetros, función
+  pedida) con cada línea del código y con la salida de R.
+- Si el valor no coincide y NO logras ubicar el error en el código, escribe "No encontré el error en el
+  código: …" explicando qué revisaste, y pon confianza "baja". Nunca inventes un error.
+- "razon" resume la decisión; "comentario_sugerido" debe mencionar el error concreto en palabras simples
+  para el alumno (sin números de línea).
+- Si el puntaje es 1, "error" va vacío.
 
 Responde SOLO un objeto JSON:
 {"items": [{"n": 1, "puntaje": <uno de los niveles de la pauta>, "nivel": "<texto del nivel>",
   "confianza": "alta|media|baja", "respuesta_correcta": bool, "codigo_funciona": bool|null,
-  "codigo_correcto": bool|null, "razon": "<para el ayudante>", "comentario_sugerido": "<para el alumno>",
+  "codigo_correcto": bool|null, "razon": "<para el ayudante>", "error": "<error concreto o vacío>",
+  "comentario_sugerido": "<para el alumno>",
   "observaciones_codigo": "<texto>", "lineas": [[ini, fin], ...] }, ...],
  "comentario_general": "<comentario breve opcional para el alumno>"}
 Incluye exactamente un elemento por cada pregunta."""
@@ -129,6 +176,8 @@ def build_prompt(c: CaseInput) -> str:
             p.append("Alternativas:\n" + "\n".join(f"- {o}" for o in it.opciones))
         p.append(f"Respuesta correcta (Canvas): {it.respuesta_correcta or '(desconocida)'}")
         p.append(f"Respuesta del alumno: {it.respuesta_alumno}  → Canvas: {marca[it.canvas_marca_correcta]}")
+        if it.aviso_clave:
+            p.append(f"AVISO DE CLAVE: {it.aviso_clave}")
         if it.fragmento_origen == "comentarios":
             p.append(f"El alumno tituló su código para esta pregunta en las líneas {it.fragmento_lineas}.")
         parts.append("\n".join(p))
@@ -145,6 +194,24 @@ def build_prompt(c: CaseInput) -> str:
     return "\n\n".join(parts)
 
 
+PROMPT_BUDGET = 16000  # caracteres (~4.800 tokens): deja espacio a la respuesta dentro del límite por minuto
+
+
+def fit_budget(case: CaseInput) -> str:
+    """Arma el prompt; si es muy largo, acorta primero lo menos esencial (nunca las preguntas)."""
+    prompt = build_prompt(case)
+    steps = [("ejecucion_r", 1800), ("bd_muestra", 500), ("solucion_output", 400), ("contexto", 1200),
+             ("ejecucion_r", 700), ("codigo", 6000)]
+    for field, size in steps:
+        if len(prompt) + len(SYSTEM) <= PROMPT_BUDGET:
+            break
+        val = getattr(case, field) or ""
+        if len(val) > size:
+            setattr(case, field, val[: size // 2] + "\n… (recortado) …\n" + val[-size // 2:])
+            prompt = build_prompt(case)
+    return prompt
+
+
 class AIAdvisor:
     def __init__(self, provider: AIProvider | None = None):
         self._provider = provider
@@ -156,7 +223,7 @@ class AIAdvisor:
         return self._provider
 
     def suggest(self, case: CaseInput, use_cache=True) -> Suggestion:
-        prompt = build_prompt(case)
+        prompt = fit_budget(case)
         p = self.provider
         key = "ai2:" + hashlib.sha256(f"{p.name}|{p.model}|{SYSTEM}|{prompt}".encode()).hexdigest()
         if use_cache and (hit := store.cache_get(key)):

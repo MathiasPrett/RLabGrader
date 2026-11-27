@@ -8,7 +8,16 @@ def _groq():
     return GroqProvider(config.GROQ_API_KEY, config.GROQ_MODEL)
 
 
-PROVIDERS = {"groq": _groq}
+def _gemini():
+    from .providers.gemini import GeminiProvider
+    return GeminiProvider(config.GEMINI_API_KEY, config.GEMINI_MODEL, config.GEMINI_FALLBACK_MODELS)
+
+
+PROVIDERS = {"groq": _groq, "gemini": _gemini}
+
+
+def model_label() -> str:
+    return {"groq": config.GROQ_MODEL, "gemini": config.GEMINI_MODEL}.get(config.AI_PROVIDER, "?")
 
 
 def make_provider(name: str | None = None) -> AIProvider:

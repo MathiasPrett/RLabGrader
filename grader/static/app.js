@@ -1,7 +1,7 @@
 // RLabGrader — interfaz. La IA solo sugiere; nada se envía sin "Confirmar".
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const S = { evals: [], info: null, students: [], cur: -1, student: null, item: 0, fr: [], ai: null, rr: null, q: "", edit: null, editing: false };
+const S = { evals: [], info: null, students: [], cur: -1, student: null, item: 0, fr: [], ai: null, rr: null, q: "", edit: null, editing: false, qc: [], aiReady: new Set(), stats: null };
 
 async function api(path, opts = {}) {
   const r = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
@@ -100,18 +100,47 @@ const isTaller = () => S.student?.items.length > 1 || S.info?.type === "taller";
 
 // ---------- inicio ----------
 // ---------- configuración (⚙): claves en .env ----------
-const KEYS = ["CANVAS_TOKEN", "COURSE_ID", "GROQ_API_KEY", "CANVAS_URL"];
+const KEYS = ["CANVAS_TOKEN", "COURSE_ID", "GROQ_API_KEY", "CANVAS_URL", "AI_PROVIDER", "GEMINI_API_KEY", "GEMINI_MODEL"];
+const SECRETS = ["CANVAS_TOKEN", "GROQ_API_KEY", "GEMINI_API_KEY"];
+// Costo aproximado por sugerencia de taller (~5.000 tokens de entrada y ~2.000-3.000 de salida),
+// según los precios publicados por Google a fines de 2026 (pueden cambiar).
+const GEMINI_COST = {
+  "gemini-3.5-flash-lite": "≈ US$ 0,006 por sugerencia de taller (≈ US$ 0,30 por 50 alumnos).",
+  "gemini-3.8-flash": "≈ US$ 0,01 por sugerencia de taller (≈ US$ 0,55 por 50 alumnos). Precio de lanzamiento hasta el 31-dic-2026; luego aprox. el doble.",
+  "gemini-3.1-pro": "≈ US$ 0,05 por sugerencia de taller (≈ US$ 2,30 por 50 alumnos).",
+};
+function setGeminiModel(m) {
+  const pick = $("#set-GEMINI_MODEL_PICK"), known = [...pick.options].some((o) => o.value === m);
+  pick.value = known ? m : "__otro";
+  $("#set-GEMINI_MODEL").value = m;
+  syncGeminiModel();
+}
+function syncGeminiModel() {
+  const v = $("#set-GEMINI_MODEL_PICK").value, other = v === "__otro";
+  $("#set-GEMINI_MODEL").hidden = !other;
+  if (!other) $("#set-GEMINI_MODEL").value = v;
+  $("#gemini-cost").innerHTML = (other ? "Escribe el nombre del modelo. " : esc(GEMINI_COST[v] || "") + " ") +
+    "Presiona <b>Probar</b> para ver los modelos disponibles con tu clave.";
+}
+function showProvider() {  // muestra solo los campos del proveedor elegido
+  const p = $("#set-AI_PROVIDER").value;
+  document.querySelectorAll("#dlg-settings .ai-groq").forEach((el) => (el.hidden = p !== "groq"));
+  document.querySelectorAll("#dlg-settings .ai-gemini").forEach((el) => (el.hidden = p !== "gemini"));
+}
 async function openSettings(firstTime = false) {
   const st = await api("/api/settings");
   for (const k of KEYS) $("#set-" + k).value = "";
-  for (const k of ["CANVAS_TOKEN", "GROQ_API_KEY"]) $("#set-" + k).type = "password";
-  for (const k of ["CANVAS_TOKEN", "GROQ_API_KEY"]) {
+  $("#set-AI_PROVIDER").value = st.AI_PROVIDER.hint || "groq";
+  setGeminiModel(st.GEMINI_MODEL.hint || "gemini-3.8-flash");
+  showProvider();
+  for (const k of SECRETS) $("#set-" + k).type = "password";
+  for (const k of SECRETS) {
     $("#set-" + k).placeholder = st[k].set ? `••••••••${st[k].hint}` : "Pega aquí la clave";
   }
   $("#set-COURSE_ID").placeholder = st.COURSE_ID.set ? st.COURSE_ID.hint : "ej. 106099";
   $("#set-CANVAS_URL").placeholder = st.CANVAS_URL.hint;
-  for (const k of ["CANVAS_TOKEN", "COURSE_ID", "GROQ_API_KEY"]) {
-    $("#st-" + k).innerHTML = st[k].set ? '<span class="pill ok">✓ configurado</span>' : (k === "GROQ_API_KEY" ? '<span class="pill">sin configurar</span>' : '<span class="pill bad">falta</span>');
+  for (const k of ["CANVAS_TOKEN", "COURSE_ID", "GROQ_API_KEY", "GEMINI_API_KEY"]) {
+    $("#st-" + k).innerHTML = st[k].set ? '<span class="pill ok">✓ configurado</span>' : (k.endsWith("API_KEY") ? '<span class="pill">sin configurar</span>' : '<span class="pill bad">falta</span>');
   }
   $("#set-msg").innerHTML = firstTime ? '<div class="note warn">Para empezar, completa el <b>token de Canvas</b> y el <b>número del curso</b>.</div>' : "";
   if (!$("#dlg-settings").open) $("#dlg-settings").showModal();
@@ -119,7 +148,12 @@ async function openSettings(firstTime = false) {
 const settingsValues = () => Object.fromEntries(KEYS.map((k) => [k, $("#set-" + k).value.trim() || null]));
 function showTest(r) {
   const line = (x) => x ? `<div class="${x.ok ? "ok" : "bad"}">${x.ok ? "✓" : "✗"} ${esc(x.msg)}</div>` : "";
-  $("#set-msg").innerHTML = line(r.canvas) + line(r.groq);
+  const p = r.ai?.provider || $("#set-AI_PROVIDER").value;
+  $("#set-msg").innerHTML = line(r.canvas) + line(p === "gemini" ? r.gemini : r.groq);
+  if (r.gemini?.models?.length) {  // modelos disponibles con la clave: los más nuevos primero
+    const ms = [...r.gemini.models].sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+    $("#gemini-models").innerHTML = ms.map((m) => `<option value="${esc(m)}">`).join("");
+  }
 }
 async function saveSettings() {
   const vals = settingsValues();
@@ -155,9 +189,11 @@ async function load(refresh = false) {
   ["eval", "group"].forEach((k) => LS.set(k, $("#sel-" + k).value));
   $("#list").innerHTML = '<p class="muted">Cargando desde Canvas…</p>';
   const r = await api(`/api/eval/${aid}?group=${encodeURIComponent(group)}&refresh=${refresh}`);
-  S.info = r.info; S.students = r.students; S.cur = -1;
+  S.info = r.info; S.students = r.students; S.cur = -1; S.aiReady = new Set(); S.stats = null;
   $("#student").innerHTML = "";
   renderList();
+  pollStats(r.info.id);
+  pollBatch(r.info.id, true);
   const first = S.students.findIndex((s) => s.status === "pendiente" && visible(s));
   select(first >= 0 ? first : S.students.findIndex((s) => s.status === "revisado" && visible(s)));
 }
@@ -172,10 +208,12 @@ function renderList() {
     html += `<h4>${title} <span class="n">${rows.length}</span></h4>`;
     for (const [s, i] of rows) {
       const app = s.app ? `<span class="badge" title="Enviado desde esta app">${s.app.dry_run ? "prueba" : "✓ app"}</span>` : "";
+      const base = s.base_missing ? '<span class="badge warnb" title="No marcó el punto base">sin base</span>' : "";
+      const ai = S.aiReady.has(s.user_id) ? '<span class="ai-ready" title="Sugerencia IA lista">✨</span>' : "";
       const warn = s.warnings.length ? `<span class="warn" title="${esc(s.warnings.join("; "))}">⚠</span>` : "";
       const sc = s.score != null && st !== "sin_entrega" ? `<span class="badge">${fmt(s.score)}</span>` : "";
       html += `<div class="st ${i === S.cur ? "sel" : ""}" data-i="${i}"><span class="dot ${st}"></span>
-        <span class="nm" title="${esc(s.name)}${s.group ? ` · ${esc(s.group)}` : ""}${s.day ? ` · día ${esc(s.day)}` : ""}${s.section ? ` · ${esc(s.section)}` : ""}">${esc(s.name)}</span>${warn}${app}${sc}</div>`;
+        <span class="nm" title="${esc(s.name)}${s.group ? ` · ${esc(s.group)}` : ""}${s.day ? ` · día ${esc(s.day)}` : ""}${s.section ? ` · ${esc(s.section)}` : ""}">${esc(s.name)}</span>${warn}${ai}${base}${app}${sc}</div>`;
     }
   }
   $("#list").innerHTML = html || (S.q ? `<p class="muted nohit">Ningún alumno coincide con “${esc($("#search").value)}”.</p>` : '<p class="muted">Sin alumnos.</p>');
@@ -187,6 +225,73 @@ function renderList() {
   $("#meter").hidden = false;
 }
 
+// ---------- estadísticas de la evaluación (claves sospechosas) ----------
+async function pollStats(aid) {
+  $("#stats-bar").hidden = false;
+  $("#stats-bar").innerHTML = '<span class="small muted">Revisando respuestas de todo el curso…</span>';
+  for (let t = 0; t < 60; t++) {
+    if (S.info?.id !== aid) return;
+    const r = await api(`/api/eval/${aid}/stats`).catch(() => null);
+    if (r?.ready) { S.stats = r; renderStats(); return; }
+    await new Promise((res) => setTimeout(res, 3000));
+  }
+  $("#stats-bar").hidden = true;
+}
+function renderStats() {
+  const r = S.stats;
+  if (!r) return;
+  const n = r.alerts.length;
+  $("#stats-bar").innerHTML = n
+    ? `<button class="stats-alert" id="btn-stats">⚠ ${n} pregunta${n > 1 ? "s" : ""} con posible error en la pauta</button>`
+    : '<button class="stats-ok quiet" id="btn-stats">Estadísticas por pregunta</button>';
+  $("#btn-stats").onclick = openStats;
+}
+function openStats() {
+  const r = S.stats;
+  const alerts = r.alerts.map((a) => `<div class="note warn small"><b>${esc(a.text)}</b><br>${esc(a.message)}</div>`).join("");
+  const rows = r.questions.map((q) => `<tr class="${q.alert ? "alert" : ""}"><td>${esc(q.text)}</td>
+    <td class="num">${q.answered}</td><td class="num">${q.correct}</td>
+    <td class="num"><span class="bar"><i style="width:${q.pct ?? 0}%"></i></span> ${q.pct ?? "—"}%</td><td>${q.alert ? "⚠" : ""}</td></tr>`).join("");
+  $("#stats-body").innerHTML = alerts + `<table class="stats"><thead><tr><th>Pregunta</th><th>Resp.</th><th>Correctas</th><th>% correctas</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="muted">Sin datos</td></tr>'}</tbody></table>`;
+  $("#dlg-stats").showModal();
+}
+
+// ---------- sugerencia IA para todos los pendientes ----------
+let batchTimer = null;
+async function startBatch() {
+  if (!S.info) return;
+  const st = await api(`/api/eval/${S.info.id}/suggest_all`).catch(() => null);
+  if (st?.running) {
+    if (confirm("¿Detener la sugerencia IA en lote?")) { await post(`/api/eval/${S.info.id}/suggest_all/cancel`); pollBatch(S.info.id); }
+    return;
+  }
+  const n = S.students.filter((s) => s.status === "pendiente").length;
+  if (!n) return alert("No hay alumnos pendientes en este grupo.");
+  if (!confirm(`Se pedirá la sugerencia IA de ${n} alumno(s) pendientes, uno tras otro, en segundo plano.\n\n` +
+    "Con Groq gratis tarda ~1 minuto por alumno en talleres; con Gemini es más rápido pero usa tus créditos.\n" +
+    "Puedes seguir corrigiendo mientras tanto. ¿Continuar?")) return;
+  await post(`/api/eval/${S.info.id}/suggest_all`, { group: $("#sel-group").value });
+  pollBatch(S.info.id);
+}
+async function pollBatch(aid, once = false) {
+  clearTimeout(batchTimer);
+  const st = await api(`/api/eval/${aid}/suggest_all`).catch(() => null);
+  if (!st || S.info?.id !== aid) return;
+  const before = S.aiReady.size;
+  st.ready.forEach((u) => S.aiReady.add(u));
+  if (S.aiReady.size !== before) renderList();
+  const err = st.errors.length ? ` · <span class="warn" title="${esc(st.errors.map((e) => e.error).join("\n"))}">${st.errors.length} con error</span>` : "";
+  if (st.running) {
+    $("#ai-all-msg").innerHTML = `Sugerencias IA: <b>${st.done}</b> de ${st.total}${err} · <a href="#" id="ai-all-stop">detener</a>`;
+    $("#btn-ai-all").textContent = "✨ IA en lote: en curso…";
+    $("#ai-all-stop").onclick = (e) => { e.preventDefault(); post(`/api/eval/${aid}/suggest_all/cancel`).then(() => pollBatch(aid)); };
+    batchTimer = setTimeout(() => pollBatch(aid), 3000);
+  } else {
+    $("#btn-ai-all").textContent = "✨ IA para todos los pendientes";
+    $("#ai-all-msg").innerHTML = st.total ? `Listas ${st.ready.length} de ${st.total} sugerencias${err}. Aparecen al abrir cada alumno (✨ en la lista).` : "";
+  }
+}
+
 // ---------- alumno ----------
 async function select(i) {
   const s = S.students[i];
@@ -195,7 +300,7 @@ async function select(i) {
   $("#list .st.sel")?.scrollIntoView({ block: "nearest" });
   $("#grade-msg").textContent = ""; $("#comment").value = ""; $("#custom").value = "";
   if (!s.user_id || s.status === "sin_entrega") {
-    S.student = null; S.fr = [];
+    S.student = null; S.fr = []; S.addBase = false;
     $("#student").innerHTML = `<div class="card sheet-head"><h3>${esc(s.name)}</h3><p class="muted">${s.user_id ? "No respondió esta evaluación." : "No se encontró en Canvas."}</p>
       ${s.warnings.map((w) => `<div class="note warn small">⚠ ${esc(w)}</div>`).join("")}</div>`;
     renderGrade(); renderAI(); return;
@@ -205,9 +310,13 @@ async function select(i) {
   if (S.students[S.cur] !== s) return;
   S.student = st;
   S.fr = st.items.map(() => null);
+  S.qc = st.items.map(() => "");
+  S.addBase = !!st.base_can_add;  // no marcó el punto base: por defecto se le asigna en la pregunta de código
+  $("#comment").value = withBase("");
   const saved = LS.get(editKey());
   if (saved != null && saved !== st.code) { S.edit = saved; }
   renderStudent(); renderGrade(); renderAI();
+  if (S.aiReady.has(s.user_id)) askAI();  // ya calculada en el lote: sale de la caché al instante
   $("#center").scrollTop = 0;
 }
 
@@ -241,6 +350,7 @@ function renderStudent() {
       <h3>${esc(s.name)}</h3><a class="small" href="${st.speedgrader}" target="_blank" rel="noopener">abrir en SpeedGrader ↗</a></div>
     <div class="grade muted">Nota actual en Canvas: <b>${st.score != null ? fmt(st.score) : "—"}</b> / ${st.points_possible} · ${st.status}${st.late ? ' · <span class="bad">atrasado</span>' : ""}</div>
     ${s.warnings.map((w) => `<div class="note warn small">⚠ ${esc(w)}</div>`).join("")}
+    ${st.base_missing ? `<div class="note warn small">⚠ <b>No marcó el punto base</b>: ${st.base_can_add ? "Por defecto se le asigna en la pregunta de código (casilla en «Tu corrección»)." : "Canvas no le dio ese punto y la entrega no tiene pregunta de código donde asignarlo."}</div>` : ""}
     ${st.comments.map((c) => `<div class="note msg small"><b>${esc(c.author)}</b>: ${esc(c.text)}</div>`).join("")}
     <details class="ctx"><summary class="small">Contexto${st.files.length ? " · BD: " + st.files.map(esc).join(", ") : ""}</summary><pre>${esc(st.context)}</pre></details></div>`;
 
@@ -264,6 +374,7 @@ function renderStudent() {
       <details ${it.answer_q.text.length < 450 ? "open" : ""}><summary class="small muted">Enunciado</summary><pre>${esc(it.answer_q.text)}</pre></details>
       ${optHtml}
       <div class="small answer">Respuesta: <b>${esc(it.answer_text)}</b>${opts.length ? "" : ` <span class="muted">· correcta: ${esc(it.answer_q.correct || "?")}</span>`}</div>
+      ${it.key_alert ? `<div class="note warn small key-alert">⚠ ${esc(it.key_alert)}</div>` : ""}
       ${codeHtml}
     </div>`;
   }).join("");
@@ -304,14 +415,22 @@ function setItem(k, scroll = true) {
 }
 function total() {
   const st = S.student;
-  return st ? st.items.reduce((a, it, k) => a + (S.fr[k] ?? 0) * it.points, 0) + (st.base_points || 0) : 0;
+  return st ? st.items.reduce((a, it, k) => a + (S.fr[k] ?? 0) * it.points, 0) + (st.base_points || 0)
+    + (S.addBase ? st.base_value || 0 : 0) : 0;
+}
+// Punto base asignado en la pregunta de código: el comentario lo indica (se puede borrar a mano)
+const BASE_NOTE = "*Punto base añadido";
+const stripBase = (text) => text.split("\n").filter((l) => l.trim() !== BASE_NOTE).join("\n").trim();
+function withBase(text) {
+  const rest = stripBase(text);
+  return S.addBase ? (rest ? rest + "\n" + BASE_NOTE : BASE_NOTE) : rest;
 }
 function renderGrade() {
   const st = S.student, lv = S.info?.rubric || [];
   const items = st?.items || [];
   const sug = S.ai?.items?.find((x) => x.n === items[S.item]?.n)?.puntaje;
   const tabs = items.length > 1 ? `<div class="tabs">${items.map((it, k) =>
-    `<button data-k="${k}" class="${k === S.item ? "on" : ""}">${esc(it.label)}<br><small>${S.fr[k] == null ? "—" : fmt(S.fr[k] * it.points) + "/" + fmt(it.points)}</small></button>`).join("")}</div>` : "";
+    `<button data-k="${k}" class="${k === S.item ? "on" : ""}">${esc(it.label)}${S.qc[k] ? " 💬" : ""}<br><small>${S.fr[k] == null ? "—" : fmt(S.fr[k] * it.points) + "/" + fmt(it.points)}</small></button>`).join("")}</div>` : "";
   const cur = S.fr[S.item];
   $("#levels").innerHTML = tabs + lv.map((l) => `<button data-v="${l.score}" class="lvl ${cur === l.score ? "on" : ""}" title="${esc(l.note)}">
       <b>${l.score}</b><span class="desc">${esc(l.description)}${sug === l.score ? '<span class="sug">IA sugiere</span>' : ""}</span></button>`).join("") +
@@ -319,8 +438,14 @@ function renderGrade() {
     (S.info?.pauta_extra ? `<details class="small excepcion" open><summary><b>Excepción de esta evaluación</b></summary><pre>${esc(S.info.pauta_extra)}</pre></details>` : "");
   $("#levels").querySelectorAll(".lvl").forEach((b) => (b.onclick = () => setScore(+b.dataset.v)));
   $("#levels").querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => setItem(+b.dataset.k)));
+  const taller = items.length > 1;
+  $("#qc-wrap").hidden = !taller;
+  $("#comment").placeholder = taller ? "Comentario general para el alumno (opcional)" : "Comentario para el alumno (opcional)";
+  if (taller) { $("#qc-label").textContent = items[S.item]?.label || "esta pregunta"; $("#qcomment").value = S.qc[S.item] || ""; }
+  $("#base-wrap").hidden = !st?.base_can_add;
+  if (st?.base_can_add) { $("#add-base").checked = !!S.addBase; $("#base-val").textContent = fmt(st.base_value); }
   const pp = S.info?.points_possible;
-  $("#total").innerHTML = st && items.length ? `Total: <b>${fmt(total())}</b>${pp ? " / " + pp : ""}${st.base_points ? ` <span class="muted">(incluye punto base ${fmt(st.base_points)})</span>` : ""}${S.fr.some((f) => f == null) ? ' · <span class="warn">faltan preguntas</span>' : ""}` : "";
+  $("#total").innerHTML = st && items.length ? `Total: <b>${fmt(total())}</b>${pp ? " / " + pp : ""}${st.base_points || S.addBase ? ` <span class="muted">(incluye punto base ${fmt(st.base_points || st.base_value)}${S.addBase ? ", añadido en la pregunta de código" : ""})</span>` : ""}${S.fr.some((f) => f == null) ? ' · <span class="warn">faltan preguntas</span>' : ""}` : "";
 }
 function setScore(v, advance = true) {
   if (!S.student?.items.length) return;
@@ -348,11 +473,15 @@ function renderAI() {
   $("#ai").innerHTML = summary + (x ? `<div class="ai-box"><div class="row"><span class="score">${x.puntaje}</span>
       <span class="small">${esc(x.nivel)}<br><span class="muted">confianza ${esc(x.confianza)}</span></span></div>
     <div class="small muted">Resp. correcta: ${yn(x.respuesta_correcta)} · código funciona: ${yn(x.codigo_funciona)} · código correcto: ${yn(x.codigo_correcto)}</div>
+    ${x.puntaje < 1 ? (x.error
+      ? `<div class="ai-error small"><b>Error detectado:</b> ${esc(x.error)}</div>`
+      : '<div class="ai-error none small">La IA no indicó el error concreto: revisa el código antes de decidir.</div>') : ""}
     <p class="small"><b>Razón:</b> ${esc(x.razon)}</p>
     ${x.observaciones_codigo ? `<p class="small"><b>Código:</b> ${esc(x.observaciones_codigo)}</p>` : ""}
     ${x.comentario_sugerido ? `<p class="small"><b>Comentario sugerido:</b> ${esc(x.comentario_sugerido)}</p>` : ""}
     <div class="row"><button id="btn-usescore">Usar ${x.puntaje}</button>${items.length > 1 ? '<button id="btn-useall">Usar todos los puntajes IA</button>' : ""}</div></div>` : "") +
-    (a.comentario_general ? `<p class="small"><b>Comentario general sugerido:</b> ${esc(a.comentario_general)}</p>` : "");
+    (a.comentario_general ? `<p class="small"><b>Comentario general sugerido:</b> ${esc(a.comentario_general)}</p>` : "") +
+    (a.aviso ? `<p class="small muted">ℹ ${esc(a.aviso)}</p>` : "");
   $("#ai").querySelectorAll(".aisum button").forEach((b) => (b.onclick = () => setItem(+b.dataset.k)));
   $("#btn-usescore")?.addEventListener("click", () => setScore(x.puntaje));
   $("#btn-useall")?.addEventListener("click", () => {
@@ -363,6 +492,17 @@ function renderAI() {
 function buildComment() {
   const a = S.ai, items = S.student?.items || [];
   if (!a?.items) return;
+  if (items.length > 1) {  // talleres: cada comentario va en su pregunta; el general, aparte
+    items.forEach((it, k) => {
+      const y = a.items.find((z) => z.n === it.n);
+      const full = (S.fr[k] ?? y?.puntaje) === 1;
+      if (y?.comentario_sugerido && !full && !S.qc[k]) S.qc[k] = y.comentario_sugerido;
+    });
+    if (a.comentario_general && !stripBase($("#comment").value)) $("#comment").value = a.comentario_general;
+    $("#comment").value = withBase($("#comment").value);
+    renderGrade();
+    return;
+  }
   const parts = [];
   items.forEach((it, k) => {
     const y = a.items.find((z) => z.n === it.n);
@@ -370,7 +510,7 @@ function buildComment() {
     if (y?.comentario_sugerido && !full) parts.push(items.length > 1 ? `${it.label}: ${y.comentario_sugerido}` : y.comentario_sugerido);
   });
   if (a.comentario_general) parts.push(a.comentario_general);
-  $("#comment").value = parts.join("\n");
+  $("#comment").value = withBase(parts.join("\n"));
 }
 
 // ---------- acciones ----------
@@ -407,10 +547,11 @@ async function grade() {
   if (S.fr.some((f) => f == null)) { renderGrade(); return alert("Falta elegir puntaje" + (st.items.length > 1 ? " en: " + st.items.filter((_, k) => S.fr[k] == null).map((i) => i.label).join(", ") : "")); }
   const s = S.students[S.cur], comment = $("#comment").value;
   const detail = st.items.map((it, k) => `${it.label}: ${S.fr[k]} × ${fmt(it.points)} = ${fmt(S.fr[k] * it.points)}`).join("\n");
-  const msg = `${s.name}\n${detail}\nTotal: ${fmt(total())}${st.base_points ? " (con punto base)" : ""}\n\nComentario: ${comment || "(ninguno)"}\n\n${dryRun() ? "MODO PRUEBA: no se enviará a Canvas." : "⚠ ENVÍO REAL: se subirá a Canvas."}`;
+  const qcs = st.items.map((it, k) => (S.qc[k] || "").trim() ? `  ${it.label}: ${S.qc[k].trim()}` : "").filter(Boolean);
+  const msg = `${s.name}\n${detail}\nTotal: ${fmt(total())}${st.base_points ? " (con punto base)" : S.addBase ? ` (con punto base ${fmt(st.base_value)} añadido en la pregunta de código)` : ""}\n\nComentario: ${comment || "(ninguno)"}${qcs.length ? "\nComentarios por pregunta:\n" + qcs.join("\n") : ""}\n\n${dryRun() ? "MODO PRUEBA: no se enviará a Canvas." : "⚠ ENVÍO REAL: se subirá a Canvas."}`;
   if (!confirm(msg)) return;
   await busy($("#btn-grade"), async () => {
-    const r = await post(`/api/eval/${S.info.id}/student/${s.user_id}/grade`, { fractions: S.fr, comment, dry_run: dryRun() });
+    const r = await post(`/api/eval/${S.info.id}/student/${s.user_id}/grade`, { fractions: S.fr, comment, dry_run: dryRun(), item_comments: S.qc, add_base: !!S.addBase });
     $("#grade-msg").innerHTML = r.dry_run ? '<span class="warn">Registrado en modo prueba (no enviado).</span>'
       : `<span class="ok">Enviado. Nota en Canvas: ${fmt(r.new_score)}</span>`;
     s.app = { dry_run: r.dry_run }; if (!r.dry_run) { s.status = "revisado"; s.score = r.new_score; }
@@ -446,6 +587,18 @@ async function saveRes() {
 $("#btn-load").onclick = () => busy($("#btn-load"), () => load(false));
 $("#btn-refresh").onclick = () => busy($("#btn-refresh"), () => load(true));
 $("#btn-run").onclick = runR;
+$("#btn-ai-all").onclick = () => startBatch().catch((e) => alert(e.message));
+$("#stats-close").onclick = () => $("#dlg-stats").close();
+$("#add-base").onchange = () => {
+  S.addBase = $("#add-base").checked;
+  $("#comment").value = withBase($("#comment").value);
+  renderGrade();
+};
+$("#qcomment").oninput = () => {
+  S.qc[S.item] = $("#qcomment").value;
+  const tab = document.querySelector(`#levels .tabs button[data-k="${S.item}"]`);
+  if (tab) tab.firstChild.textContent = (S.student.items[S.item].label) + (S.qc[S.item].trim() ? " 💬" : "");
+};
 $("#btn-ai").onclick = askAI;
 $("#btn-grade").onclick = grade;
 $("#btn-comment").onclick = buildComment;
@@ -494,6 +647,8 @@ document.addEventListener("keydown", (e) => {
 
 $("#btn-settings").onclick = () => openSettings().catch((e) => alert(e.message));
 $("#set-close").onclick = () => $("#dlg-settings").close();
+$("#set-AI_PROVIDER").onchange = showProvider;
+$("#set-GEMINI_MODEL_PICK").onchange = () => { syncGeminiModel(); if ($("#set-GEMINI_MODEL_PICK").value === "__otro") $("#set-GEMINI_MODEL").focus(); };
 $("#set-test").onclick = () => busy($("#set-test"), async () => showTest(await post("/api/settings/test", settingsValues())));
 $("#set-save").onclick = () => busy($("#set-save"), saveSettings);
 document.querySelectorAll("[data-help]").forEach((b) => (b.onclick = () => {

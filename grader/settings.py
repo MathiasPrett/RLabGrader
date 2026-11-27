@@ -25,12 +25,20 @@ FIELDS = {
                   "msg": "El número del curso son solo dígitos (lo ves en la URL: .../courses/123456)."},
     "CANVAS_URL": {"secret": False, "re": r"https://[A-Za-z0-9.\-]+(:\d{1,5})?",
                    "msg": "La dirección de Canvas debe ser del tipo https://cursos.canvas.uc.cl (sin / al final)."},
+    "AI_PROVIDER": {"secret": False, "re": r"groq|gemini", "msg": "El proveedor de IA debe ser groq o gemini."},
+    # formatos de Google: "AIza…" y el más nuevo "AQ.Ab…" (con puntos)
+    "GEMINI_API_KEY": {"secret": True, "re": r"[A-Za-z0-9_\-.]{20,400}",
+                       "msg": "La API key de Gemini debe ser una sola línea, sin espacios (empieza con AIza o AQ.)."},
+    "GEMINI_MODEL": {"secret": False, "re": r"[A-Za-z0-9.\-]{3,80}",
+                     "msg": "El modelo de Gemini debe ser un nombre como gemini-3.8-flash."},
 }
 
 
 def _current(key) -> str:
     return {"CANVAS_TOKEN": config.CANVAS_TOKEN, "GROQ_API_KEY": config.GROQ_API_KEY,
-            "COURSE_ID": str(config.COURSE_ID or ""), "CANVAS_URL": config.CANVAS_URL}[key]
+            "COURSE_ID": str(config.COURSE_ID or ""), "CANVAS_URL": config.CANVAS_URL,
+            "AI_PROVIDER": config.AI_PROVIDER, "GEMINI_API_KEY": config.GEMINI_API_KEY,
+            "GEMINI_MODEL": config.GEMINI_MODEL}[key]
 
 
 def _is_set(key, value) -> bool:
@@ -46,6 +54,8 @@ def status() -> dict:
         ok = _is_set(key, v)
         out[key] = {"set": ok, "hint": (v[-4:] if f["secret"] else v) if ok else ""}
     out["CANVAS_URL"]["hint"] = config.CANVAS_URL  # siempre visible (tiene valor por defecto)
+    out["AI_PROVIDER"]["hint"] = config.AI_PROVIDER
+    out["GEMINI_MODEL"]["hint"] = config.GEMINI_MODEL
     out["env_exists"] = config.ENV_FILE.exists()
     out["ready"] = out["CANVAS_TOKEN"]["set"] and out["COURSE_ID"]["set"]
     return out
@@ -102,7 +112,25 @@ def test(values: dict) -> dict:
         except requests.RequestException:
             res["groq"] = {"ok": False, "msg": "No se pudo conectar con Groq"}
     else:
-        res["groq"] = {"ok": False, "msg": "Sin API key de Groq: la sugerencia IA no funcionará (es opcional)"}
+        res["groq"] = {"ok": False, "msg": "Sin API key de Groq" + (
+            ": la sugerencia IA no funcionará (es opcional)" if v["AI_PROVIDER"] == "groq" else " (no se usa)")}
+    if _is_set("GEMINI_API_KEY", v["GEMINI_API_KEY"]):
+        from .ai.providers.gemini import list_models
+        try:
+            models = list_models(v["GEMINI_API_KEY"])
+            has = v["GEMINI_MODEL"] in models
+            res["gemini"] = {"ok": has, "models": models,
+                             "msg": f"La API key de Gemini funciona · modelo {v['GEMINI_MODEL']} "
+                                    + ("disponible" if has else "NO disponible: elige otro de la lista")}
+        except requests.HTTPError as e:
+            code = e.response.status_code if e.response is not None else "?"
+            res["gemini"] = {"ok": False, "msg": "Gemini rechazó la API key" if code in (400, 401, 403)
+                             else f"Gemini respondió {code}"}
+        except requests.RequestException:
+            res["gemini"] = {"ok": False, "msg": "No se pudo conectar con Gemini"}
+    elif v["AI_PROVIDER"] == "gemini":
+        res["gemini"] = {"ok": False, "msg": "Elegiste Gemini pero falta su API key"}
+    res["ai"] = {"provider": v["AI_PROVIDER"]}
     return res
 
 

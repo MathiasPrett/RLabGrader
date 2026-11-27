@@ -14,7 +14,7 @@ from . import config, r_packages, store
 from .assessments import segment
 
 MAX_OUT = 8000
-RUNNER_VERSION = 10  # subir al cambiar prepare() o runner.R: invalida la caché
+RUNNER_VERSION = 11  # subir al cambiar prepare() o runner.R: invalida la caché
 MAX_PLOTS = 12
 MEM_BYTES = 2 * 1024**3
 
@@ -135,6 +135,44 @@ def _strip_console(code, changes):
     return "\n".join(keep)
 
 
+def _open_depth(line: str) -> int:
+    """Cuánto abre una línea: ( [ { menos ) ] } (fuera de comillas y comentarios)."""
+    d, q = 0, None
+    for ch in line:
+        if q:
+            q = None if ch == q else q
+        elif ch in "\"'`":
+            q = ch
+        elif ch == "#":
+            break
+        elif ch in "([{":
+            d += 1
+        elif ch in ")]}":
+            d -= 1
+    return d
+
+
+_CONTINUES = re.compile(r"(<-|=|\+|-|\*|/|\^|,|\||&|%>%|%in%|~|\(|\[|\{)\s*(#.*)?$")
+
+
+def _strip_continuations(code, changes):
+    """'+ ' al inicio de una línea copiada de la consola (continuación de la anterior): se quita
+    solo si la expresión de arriba sigue abierta, así no se toca un '+' real (p. ej. de ggplot)."""
+    out, n, depth, prev_open = [], 0, 0, False
+    for l in code.splitlines():
+        if (depth > 0 or prev_open) and re.match(r"^\s*\+\s", l):
+            l = re.sub(r"^\s*\+\s?", "", l, count=1)
+            n += 1
+        stripped = l.split("#", 1)[0].rstrip() if "#" in l and '"' not in l and "'" not in l else l.rstrip()
+        if stripped:
+            depth = max(0, depth + _open_depth(l))
+            prev_open = bool(_CONTINUES.search(stripped))
+        out.append(l)
+    if n:
+        changes.append(f"quitado el '+' de continuación de la consola en {n} línea(s)")
+    return "\n".join(out)
+
+
 def _strip_prompts(code, changes):
     """Líneas sueltas copiadas de la consola ('> x', '>' solo) dentro de código normal."""
     out, n = [], 0
@@ -164,6 +202,18 @@ def _is_output_row(line) -> bool:
     return line.split()[0] not in _R_WORDS
 
 
+_STRAY = re.compile(r"^\s*[.,;:·•]+\s*$")
+_CODE_HINT = re.compile(r"<-|->|=|\(|\)|\[|\]|\$|\{|\}|%|\^|\*|/|~|::")
+
+
+def _is_prose(line) -> bool:
+    """Línea de explicación escrita sin '#' ('calculo la probabilidad filtrando por…').
+    Varias palabras sin nada que parezca código nunca son R válido."""
+    s = line.strip()
+    words = re.findall(r"[A-Za-zÁÉÍÓÚáéíóúñÑüÜ]+", s)
+    return len(words) >= 4 and not _CODE_HINT.search(s) and not s.startswith(("library", "require"))
+
+
 def _comment_headers(code, changes):
     """Títulos sin '#' ('Pregunta 1:', '1.- código') rompen R: se comentan."""
     out, n = [], 0
@@ -174,7 +224,8 @@ def _comment_headers(code, changes):
             out.append(f"# [título] {l.strip() if not h[2] else l.strip()[:len(l.strip()) - len(h[2])].strip()}")
             if h[2]:
                 out.append(h[2])
-        elif not l.lstrip().startswith("#") and (_CONSOLE_NOISE.match(l) or _is_output_row(l)):
+        elif not l.lstrip().startswith("#") and (_CONSOLE_NOISE.match(l) or _is_output_row(l)
+                                                 or _STRAY.match(l) or _is_prose(l)):
             n += 1
             out.append("# [salida] " + l)
         else:
@@ -193,6 +244,7 @@ def prepare(code: str, data_names: list[str]) -> tuple[str, list[str]]:
     lower = {n.lower(): n for n in data_names}
     code = _strip_console(code, changes)
     code = _strip_prompts(code, changes)
+    code = _strip_continuations(code, changes)
     code = _comment_headers(code, changes)
 
     def fix_path(m):

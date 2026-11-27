@@ -111,12 +111,13 @@ class CanvasClient:
         )
 
     # ---------- escritura ----------
-    def set_question_scores(self, quiz_id, quiz_submission_id, attempt, scores, dry_run: bool = True):
-        """scores: {question_id: puntaje}. Solo cambia esas preguntas."""
-        body = {"quiz_submissions": [{
-            "attempt": attempt,
-            "questions": {str(q): {"score": s} for q, s in scores.items()},
-        }]}
+    def set_question_scores(self, quiz_id, quiz_submission_id, attempt, scores, dry_run: bool = True,
+                            comments: dict | None = None):
+        """scores: {question_id: puntaje}; comments: {question_id: comentario de esa pregunta}."""
+        questions = {str(q): {"score": s} for q, s in scores.items()}
+        for q, c in (comments or {}).items():
+            questions.setdefault(str(q), {})["comment"] = c
+        body = {"quiz_submissions": [{"attempt": attempt, "questions": questions}]}
         return self.put(f"{self.c}/quizzes/{quiz_id}/submissions/{quiz_submission_id}", body, dry_run)
 
     def add_comment(self, assignment_id, user_id, text, dry_run: bool = True):

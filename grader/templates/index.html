@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
-<link rel="stylesheet" href="/static/app.css?v=9">
+<link rel="stylesheet" href="/static/app.css?v=14">
 </head>
 <body>
 <header>
@@ -53,6 +53,7 @@
     <div class="search">
       <input id="search" type="search" placeholder="Buscar alumno…  ( / )" autocomplete="off" spellcheck="false">
     </div>
+    <div id="stats-bar" hidden></div>
     <div id="list">
       <div class="empty">
         <img src="/static/logo.svg" alt="" width="40" height="40">
@@ -71,6 +72,8 @@
         <button id="btn-run" title="Atajo: r"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.8v8.4L10 6z"/></svg>Ejecutar R</button>
         <button id="btn-ai" title="Atajo: i">Sugerencia IA</button>
       </div>
+      <div class="row ai-all"><button id="btn-ai-all" class="quiet" title="Pide en segundo plano la sugerencia IA de todos los alumnos pendientes del grupo cargado">✨ IA para todos los pendientes</button></div>
+      <div id="ai-all-msg" class="small muted"></div>
       <div id="ai" class="muted small">La IA solo recomienda. Tú decides.</div>
     </div>
     <div class="card" id="grade-card">
@@ -78,6 +81,11 @@
       <div id="levels"></div>
       <label class="small custom">Otro puntaje (0–1) <input id="custom" type="number" step="0.05" min="0" max="1"></label>
       <div id="total" class="small"></div>
+      <label id="base-wrap" class="small base-add" hidden><input type="checkbox" id="add-base"> Añadir el punto base (<span id="base-val">1</span>) en la pregunta de código</label>
+      <div id="qc-wrap" hidden>
+        <label for="qcomment" class="small qc-label">Comentario de <b id="qc-label">esta pregunta</b> (va en la pregunta en Canvas)</label>
+        <textarea id="qcomment" rows="3" placeholder="Comentario para esta pregunta (opcional)"></textarea>
+      </div>
       <textarea id="comment" rows="5" placeholder="Comentario para el alumno (opcional)"></textarea>
       <button id="btn-comment" class="quiet" title="Atajo: c">Armar comentario desde la IA</button>
       <button id="btn-grade" class="primary" title="Ctrl+Enter">Confirmar y subir a Canvas</button>
@@ -126,14 +134,46 @@
   </div>
 
   <div class="field">
-    <div class="lbl"><label for="set-GROQ_API_KEY">API key de Groq</label><button type="button" class="info" data-help="help-GROQ_API_KEY" aria-expanded="false" aria-controls="help-GROQ_API_KEY" title="¿Cómo lo obtengo?">i</button><span class="opt">opcional, para la sugerencia IA</span><span class="state" id="st-GROQ_API_KEY"></span></div>
+    <div class="lbl"><label for="set-AI_PROVIDER">Proveedor de IA</label><span class="opt">opcional, para la sugerencia IA</span></div>
+    <select id="set-AI_PROVIDER">
+      <option value="groq">Groq (cuenta gratuita, con límite por minuto)</option>
+      <option value="gemini">Google Gemini (usa tus créditos de Google)</option>
+    </select>
+  </div>
+
+  <div class="field ai-groq">
+    <div class="lbl"><label for="set-GROQ_API_KEY">API key de Groq</label><button type="button" class="info" data-help="help-GROQ_API_KEY" aria-expanded="false" aria-controls="help-GROQ_API_KEY" title="¿Cómo lo obtengo?">i</button><span class="state" id="st-GROQ_API_KEY"></span></div>
     <div class="secret"><input id="set-GROQ_API_KEY" type="password" autocomplete="off" spellcheck="false">
       <button type="button" class="eye" data-eye="set-GROQ_API_KEY" title="Mostrar u ocultar" aria-label="Mostrar u ocultar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
     <div class="help" id="help-GROQ_API_KEY" hidden><ol>
       <li>Entra a <a href="https://console.groq.com" target="_blank" rel="noopener">console.groq.com</a> y crea una cuenta (puedes usar Google o GitHub).</li>
       <li>En el menú, ve a <b>API Keys</b> y presiona <b>Create API Key</b>.</li>
       <li>Ponle un nombre (ej. <i>RLabGrader</i>), copia la clave (empieza con <code>gsk_</code>) y pégala aquí. Se muestra una sola vez.</li>
-    </ol><p class="muted">La cuenta gratuita tiene límites de uso: si se alcanzan, la IA puede tardar o fallar un rato.</p></div>
+    </ol><p class="muted">La cuenta gratuita permite aprox. una sugerencia de taller por minuto; la app espera sola cuando hace falta.</p></div>
+  </div>
+
+  <div class="field ai-gemini" hidden>
+    <div class="lbl"><label for="set-GEMINI_API_KEY">API key de Gemini</label><button type="button" class="info" data-help="help-GEMINI_API_KEY" aria-expanded="false" aria-controls="help-GEMINI_API_KEY" title="¿Cómo lo obtengo?">i</button><span class="state" id="st-GEMINI_API_KEY"></span></div>
+    <div class="secret"><input id="set-GEMINI_API_KEY" type="password" autocomplete="off" spellcheck="false">
+      <button type="button" class="eye" data-eye="set-GEMINI_API_KEY" title="Mostrar u ocultar" aria-label="Mostrar u ocultar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+    <div class="help" id="help-GEMINI_API_KEY" hidden><ol>
+      <li>Entra a <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> con tu cuenta de Google.</li>
+      <li>Presiona <b>Create API key</b> y elige el proyecto de Google Cloud donde tienes los créditos.</li>
+      <li>Copia la clave (empieza con <code>AIza</code> o <code>AQ.</code>) y pégala aquí.</li>
+    </ol><p class="muted">Lo que uses se descuenta de los créditos o la facturación de ese proyecto.</p></div>
+  </div>
+
+  <div class="field ai-gemini" hidden>
+    <div class="lbl"><label for="set-GEMINI_MODEL_PICK">Modelo de Gemini</label></div>
+    <select id="set-GEMINI_MODEL_PICK">
+      <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite · $ barato — rápido, para casos simples</option>
+      <option value="gemini-3.8-flash">gemini-3.8-flash · $$ medio — recomendado</option>
+      <option value="gemini-3.1-pro">gemini-3.1-pro · $$$ caro — el más cuidadoso</option>
+      <option value="__otro">Otro modelo…</option>
+    </select>
+    <input id="set-GEMINI_MODEL" list="gemini-models" autocomplete="off" spellcheck="false" placeholder="nombre del modelo, ej. gemini-3.7-flash" hidden>
+    <datalist id="gemini-models"></datalist>
+    <div class="small muted hint" id="gemini-cost"></div>
   </div>
 
   <details class="advanced"><summary>Opciones avanzadas</summary>
@@ -147,6 +187,14 @@
   <div id="set-msg" class="small"></div>
   <div class="row end actions"><button id="set-close" class="quiet">Cerrar</button><button id="set-test">Probar</button>
     <button id="set-save" class="primary">Guardar</button></div>
+</dialog>
+
+<dialog id="dlg-stats">
+  <h3>Estadísticas por pregunta</h3>
+  <p class="small muted">Todos los alumnos de la planilla. "Correctas" compara con la clave actual de Canvas.
+    Si muchos alumnos coinciden en un mismo valor distinto a la clave, la pauta podría estar mal.</p>
+  <div id="stats-body"></div>
+  <div class="row end actions"><button id="stats-close" class="quiet">Cerrar</button></div>
 </dialog>
 
 <dialog id="dlg-res">
@@ -163,6 +211,6 @@
   <div class="row end"><button id="res-close" class="quiet">Cerrar</button><button id="res-save" class="primary">Guardar</button></div>
 </dialog>
 
-<script src="/static/app.js?v=9"></script>
+<script src="/static/app.js?v=17"></script>
 </body>
 </html>
